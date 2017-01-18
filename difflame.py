@@ -104,8 +104,6 @@ def process_file_from_diff_output(output_lines, starting_line):
     """
     process diff output for a line.
     Will return position of next file in diff outtput
-    
-    TODO support mode changes without changing content
     """
     # First is a 'diff' line
     i=starting_line
@@ -166,16 +164,52 @@ if len(sys.argv) < 3:
 # got at least two parameters
 # will probably have to go through all the parameters (when we have them) in order to parse them
 
-# finally, will get the two branches where we will work on
-treeish1=sys.argv[-2]
-treeish2=sys.argv[-1]
+# additional parameters
+params=[]
+treeish1=None
+treeish2=None
+files=[]
+
+double_dash=False # haven't found the double dash yet
+
+# process branches
+for param in sys.argv[1:]:
+    if double_dash:
+        # it's a file path
+        files.append(param)
+    else:
+        # haven't found the double dash yet
+        if param.startswith('--'):
+            # double dash or parameter
+            if (len(param) == 2):
+                # it's a --
+                double_dash=True
+            else:
+                params.append(param)
+        else:
+            # it's a branch
+            treeish1=treeish2
+            treeish2=param
+
+if treeish1 is None:
+    treeish1 = treeish2
+    treeish2 = "HEAD"
 
 diff_output = None
 try:
-    diff_output = run_git_command(["diff", treeish1 + ".." + treeish2])
-except Exception as e:
+    diff_params=["diff"]
+    diff_params.extend(params)
+    diff_params.append(treeish1 + ".." + treeish2)
+    if len(files) > 0:
+        # only get diff for some paths
+        diff_params.append('--')
+        diff_params.extend(files)
+        
+    diff_output = run_git_command(diff_params)
+except:
     print "there was an error running git"
-    print e
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
 # processing diff output
