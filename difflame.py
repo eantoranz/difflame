@@ -19,7 +19,24 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
-def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name):
+def get_blame_info_hunk(treeish, file_name, hunk_position):
+    """
+    Get blame for especified hunk
+    file_name will remove prepending 'a/' or '/b' if present
+    Hunk position says starting line and size of hunk in lines
+    """
+    if file_name.startswith('a/') or file_name.startswith('b'):
+        file_name = file_name[2:]
+    hunk_position = hunk_position.split(',')
+    if hunk_position[0] == '0':
+        # file doesn't exist
+        return []
+    
+    starting_line=int(hunk_position[0])
+    ending_line=starting_line+int(hunk_position[1])-1
+    return run_git_command(["blame", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
+
+def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
     Process a diff hunk from a file
     A hunk starts with a line that starts with @ and describes the position of the block of code in original file and ending file
@@ -44,8 +61,8 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
     print hunk_description_line
     
     hunk_description_info = hunk_description_line.split()
-    original_file_info = hunk_description_info[1]
-    final_file_info = hunk_description_info[2]
+    original_file_hunk_pos = hunk_description_info[1]
+    final_file_hunk_pos = hunk_description_info[2]
     
     hunk_lines = []
     # let's get the lines until we get to next hunk, next file or EOF
@@ -55,10 +72,24 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
         hunk_lines.append(output_lines[i])
         i+=1
     
+    # let's get blame information for final final
+    final_blame=get_blame_info_hunk(treeish2, final_name, final_file_hunk_pos).split("\n")
+    final_blame_index = 0
+    original_blame_index = 0
     for line in hunk_lines:
-        print line
-    
-    # got to one of the cases that makes hunk finish (EOF, end of file or end of hunk)
+        if line[0] in [' ', '+']:
+            # print line from final blame
+            print line[0] + final_blame[final_blame_index]
+            final_blame_index+=1
+            if line[0] == ' ':
+                # also move on the original_blame
+                original_blame_index+=1
+        else:
+            # it's a line that was deleted so have to pull it from the original_blame
+            print line # print the line for the time being
+            original_blame_index+=1
+
+    # hunk is finished (EOF, end of file or end of hunk)
     return i
 
 def process_file_from_diff_output(output_lines, starting_line):
@@ -95,7 +126,7 @@ def process_file_from_diff_output(output_lines, starting_line):
     # Now we start going through the hunks until we find a diff
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] != 'd':
         # hunk starts with a @
-        i = process_hunk_from_diff_output(output_lines, i, original_name, final_name)
+        i = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
     
     return i
 
