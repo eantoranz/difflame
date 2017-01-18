@@ -19,22 +19,29 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
-def get_blame_info_hunk(treeish, file_name, hunk_position):
+def get_blame_info_hunk(treeish, file_name, hunk_position, treeish2=None):
     """
     Get blame for especified hunk
     file_name will remove prepending 'a/' or '/b' if present
     Hunk position says starting line and size of hunk in lines
+    
+    If treeish2 is set up, it means it's a reverse blame (to get deleted lines)
     """
     if file_name.startswith('a/') or file_name.startswith('b'):
         file_name = file_name[2:]
     hunk_position = hunk_position.split(',')
-    if hunk_position[0] == '0':
-        # file doesn't exist
-        return []
     
     starting_line=int(hunk_position[0])
+    if starting_line == 0:
+        return ""
+    if starting_line < 0:
+        starting_line*=-1
     ending_line=starting_line+int(hunk_position[1])-1
-    return run_git_command(["blame", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
+    if treeish2 == None:
+        return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
+    else:
+        # reverse blame
+        return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
 
 def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
@@ -75,6 +82,7 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
     # let's get blame information for final final
     final_blame=get_blame_info_hunk(treeish2, final_name, final_file_hunk_pos).split("\n")
     final_blame_index = 0
+    original_blame=get_blame_info_hunk(treeish2, final_name, original_file_hunk_pos, treeish1).split("\n")
     original_blame_index = 0
     for line in hunk_lines:
         if line[0] in [' ', '+']:
@@ -86,7 +94,7 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
                 original_blame_index+=1
         else:
             # it's a line that was deleted so have to pull it from the original_blame
-            print line # print the line for the time being
+            print line[0] + original_blame[original_blame_index]
             original_blame_index+=1
 
     # hunk is finished (EOF, end of file or end of hunk)
