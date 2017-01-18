@@ -38,10 +38,10 @@ def get_blame_info_hunk(treeish, file_name, hunk_position, treeish2=None):
         starting_line*=-1
     ending_line=starting_line+int(hunk_position[1])-1
     if treeish2 == None:
-        return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
+        return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
     else:
         # reverse blame
-        return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
+        return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
 
 def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
@@ -119,7 +119,7 @@ def process_file_from_diff_output(output_lines, starting_line):
     # let's get to the line that starts with ---
     while i < len(output_lines) and not output_lines[i].startswith("---"):
         if output_lines[i].startswith("diff"):
-            # got a new file.... moving on
+            # just finished a file without content changes
             return i
         print output_lines[i]; i+=1
     
