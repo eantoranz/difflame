@@ -112,16 +112,20 @@ def process_file_from_diff_output(output_lines, starting_line):
     diff_line = output_lines[i].split()
     if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
-    original_name = diff_line[1]
-    final_name = diff_line[2]
+    original_name = diff_line[2]
+    final_name = diff_line[3]
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
     while i < len(output_lines) and not output_lines[i].startswith("---"):
+        if output_lines[i].startswith("diff"):
+            # got a new file.... moving on
+            return i
         print output_lines[i]; i+=1
     
     if i >= len(output_lines):
-        raise Exception("Couln't find line starting with --- for a file (" + original_name + ", " + final_name + ")")
+        # a file without content was the last on the patch
+        return i
     
     print output_lines[i]; i+=1 # line with ---
     
