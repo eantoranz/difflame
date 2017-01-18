@@ -19,10 +19,54 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
+def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name):
+    """
+    Process a diff hunk from a file
+    A hunk starts with a line that starts with @ and describes the position of the block of code in original file and ending file
+        (more datails to come)
+    Then we have lines that start with:
+        - ' ': Line didn't change
+        - '+': Line was added
+        - '-': Line was deleted
+    Until we have a line that starts with a 'd' or a '@' (begining of new file or begining of new hunk)
+    """
+    i = starting_line
+    hunk_description_line = output_lines[i]
+    if len(hunk_description_line) == 0:
+        # reached EOF, probably
+        return i+1
+    
+    if not hunk_description_line[0] == '@':
+        # not the begining of a hunk
+        raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + ")")
+    
+    # ok.... got a hunk
+    print hunk_description_line
+    
+    hunk_description_info = hunk_description_line.split()
+    original_file_info = hunk_description_info[1]
+    final_file_info = hunk_description_info[2]
+    
+    hunk_lines = []
+    # let's get the lines until we get to next hunk, next file or EOF
+    i+=1
+    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] in [' ', '+', '-']:
+        # a valid line in the hunk
+        hunk_lines.append(output_lines[i])
+        i+=1
+    
+    for line in hunk_lines:
+        print line
+    
+    # got to one of the cases that makes hunk finish (EOF, end of file or end of hunk)
+    return i
+
 def process_file_from_diff_output(output_lines, starting_line):
     """
     process diff output for a line.
     Will return position of next file in diff outtput
+    
+    TODO support mode changes without changing content
     """
     # First is a 'diff' line
     i=starting_line
@@ -50,7 +94,8 @@ def process_file_from_diff_output(output_lines, starting_line):
     
     # Now we start going through the hunks until we find a diff
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] != 'd':
-        print output_lines[i]; i+=1
+        # hunk starts with a @
+        i = process_hunk_from_diff_output(output_lines, i, original_name, final_name)
     
     return i
 
