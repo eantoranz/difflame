@@ -11,6 +11,14 @@
 import subprocess
 import sys
 
+def run_git_command(args):
+    """
+    Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
+    """
+    command = ["git"]
+    command.extend(args)
+    return subprocess.check_output(command)
+
 if len(sys.argv) < 3:
     # not enough parameters
     sys.stderr.write("Not enough parameters\n")
@@ -25,6 +33,7 @@ treeish1=sys.argv[-2]
 treeish2=sys.argv[-1]
 
 try:
-    print subprocess.check_output(["git", "diff", "--color", treeish1 + ".." + treeish2])
-except:
+    print run_git_command(["diff", "--color", treeish1 + ".." + treeish2])
+except Exception as e:
     print "there was an error running git"
+    print e
