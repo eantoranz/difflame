@@ -11,6 +11,14 @@
 import subprocess
 import sys
 
+# some color diff markers so that they don't have to be written over and over
+COLOR_DIFF_LINE_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"
+COLOR_TRIPLE_DASH_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"
+COLOR_TRIPLE_PLUS_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"
+COLOR_LINE_ADDED_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+'
+COLOR_LINE_REMOVED_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-'
+COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
+
 def cleanup_filename(filename):
     """
     There could be color markers on the filename... remove them
@@ -81,7 +89,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         # reached EOF, probably
         return i+1
     
-    if hunk_description_line[0] != '@' and not hunk_description_line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"):
+    if hunk_description_line[0] != '@' and not hunk_description_line.startswith(COLOR_HUNK_DESCRIPTOR_MARKER):
         # not the begining of a hunk
         raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + ")")
     
@@ -95,7 +103,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     hunk_lines = []
     # let's get the lines until we get to next hunk, next file or EOF
     i+=1
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-'] or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+') or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-')):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
         # a valid line in the hunk
         hunk_lines.append(output_lines[i])
         i+=1
@@ -113,7 +121,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
             if line[0] == ' ':
                 # also move on the original_blame
                 original_blame_index+=1
-        elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+'):
+        elif line.startswith(COLOR_LINE_ADDED_MARKER):
             # print line from final blame with color adjusted
             print line[0:6] + final_blame[final_blame_index] + line[-3:]
             final_blame_index+=1
@@ -121,7 +129,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
             # it's a line that was deleted so have to pull it from the original_blame
             print line[0] + original_blame[original_blame_index]
             original_blame_index+=1
-        elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-'):
+        elif line.startswith(COLOR_LINE_REMOVED_MARKER):
             # print line from final blame with color adjusted
             print line[0:6] + original_blame[original_blame_index] + line[-3:]
             original_blame_index+=1
@@ -137,15 +145,15 @@ def process_file_from_diff_output(blame_params, output_lines, starting_line):
     # First is a 'diff' line
     i=starting_line
     diff_line = output_lines[i].split()
-    if diff_line[0] not in ["diff", chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"]:
+    if diff_line[0] not in ["diff", COLOR_DIFF_LINE_MARKER]:
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
     original_name = cleanup_filename(diff_line[2])
     final_name = cleanup_filename(diff_line[3])
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
-    while i < len(output_lines) and not output_lines[i].startswith("---") and not output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"):
-        if output_lines[i].startswith("diff") or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"):
+    while i < len(output_lines) and not output_lines[i].startswith("---") and not output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
+        if output_lines[i].startswith("diff") or output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
             # just finished a file without content changes
             return i
         print output_lines[i]; i+=1
@@ -157,13 +165,13 @@ def process_file_from_diff_output(blame_params, output_lines, starting_line):
     print output_lines[i]; i+=1 # line with ---
     
     # next should begin with +++
-    if not output_lines[i].startswith("+++") and not output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"):
+    if not output_lines[i].startswith("+++") and not output_lines[i].startswith(COLOR_TRIPLE_PLUS_MARKER):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
     print output_lines[i]; i+=1 # line with +++
     
     # Now we start going through the hunks until we don't have a hunk starter mark
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@")):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
         # hunk starts with a @
         i = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
     
