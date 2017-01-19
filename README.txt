@@ -5,6 +5,9 @@ Released under the terms of GPLv2
 
 Show the output of diff with the additional information of blame
 
+options:
+--color: diff output with color
+
 Example output (from difflame project itself, two revisions apart, using blame params to change default output from git blame):
 
 $ difflame.py -bp=-t -bp=-e 3d426842 6e2bfb8f

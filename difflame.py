@@ -115,7 +115,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
                 original_blame_index+=1
         elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+'):
             # print line from final blame with color adjusted
-            print line[0:6] + final_blame[final_blame_index] + line[-5:]
+            print line[0:6] + final_blame[final_blame_index] + line[-3:]
             final_blame_index+=1
         elif line[0] == '-':
             # it's a line that was deleted so have to pull it from the original_blame
@@ -123,7 +123,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
             original_blame_index+=1
         elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-'):
             # print line from final blame with color adjusted
-            print line[0:6] + original_blame[original_blame_index] + line[-5:]
+            print line[0:6] + original_blame[original_blame_index] + line[-3:]
             original_blame_index+=1
     
     # hunk is finished (EOF, end of file or end of hunk)
@@ -206,8 +206,10 @@ for param in sys.argv[1:]:
                 # it's a --
                 double_dash=True
             else:
+                if param=="--color":
+                    diff_params.append("--color") # use diff color output
                 # is it a diff param or a blame param?
-                if param.startswith("--diff-param=") or param.startswith("-dp="):
+                elif param.startswith("--diff-param=") or param.startswith("-dp="):
                     # diff param
                     diff_params.append(param[param.index('=') + 1:])
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
