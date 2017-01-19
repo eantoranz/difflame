@@ -11,6 +11,20 @@
 import subprocess
 import sys
 
+def cleanup_filename(filename):
+    """
+    There could be color markers on the filename... remove them
+    """
+    index = filename.find(chr(0x1b))
+    if index == -1:
+        return filename # it's clean
+    if index == 0:
+        # it' white, right? Let's remove it
+        filename=filename[4:]
+    else:
+        filename=filename[:index]
+    return filename
+
 def run_git_command(args):
     """
     Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
@@ -67,7 +81,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         # reached EOF, probably
         return i+1
     
-    if not hunk_description_line[0] == '@':
+    if hunk_description_line[0] != '@' and not hunk_description_line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"):
         # not the begining of a hunk
         raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + ")")
     
@@ -81,7 +95,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     hunk_lines = []
     # let's get the lines until we get to next hunk, next file or EOF
     i+=1
-    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] in [' ', '+', '-']:
+    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-'] or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+') or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-')):
         # a valid line in the hunk
         hunk_lines.append(output_lines[i])
         i+=1
@@ -99,11 +113,19 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
             if line[0] == ' ':
                 # also move on the original_blame
                 original_blame_index+=1
-        else:
+        elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+'):
+            # print line from final blame with color adjusted
+            print line[0:6] + final_blame[final_blame_index] + line[-5:]
+            final_blame_index+=1
+        elif line[0] == '-':
             # it's a line that was deleted so have to pull it from the original_blame
             print line[0] + original_blame[original_blame_index]
             original_blame_index+=1
-
+        elif line.startswith(chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-'):
+            # print line from final blame with color adjusted
+            print line[0:6] + original_blame[original_blame_index] + line[-5:]
+            original_blame_index+=1
+    
     # hunk is finished (EOF, end of file or end of hunk)
     return i
 
@@ -115,15 +137,15 @@ def process_file_from_diff_output(blame_params, output_lines, starting_line):
     # First is a 'diff' line
     i=starting_line
     diff_line = output_lines[i].split()
-    if diff_line[0] != "diff":
+    if diff_line[0] not in ["diff", chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"]:
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
-    original_name = diff_line[2]
-    final_name = diff_line[3]
+    original_name = cleanup_filename(diff_line[2])
+    final_name = cleanup_filename(diff_line[3])
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
-    while i < len(output_lines) and not output_lines[i].startswith("---"):
-        if output_lines[i].startswith("diff"):
+    while i < len(output_lines) and not output_lines[i].startswith("---") and not output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"):
+        if output_lines[i].startswith("diff") or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"):
             # just finished a file without content changes
             return i
         print output_lines[i]; i+=1
@@ -135,13 +157,13 @@ def process_file_from_diff_output(blame_params, output_lines, starting_line):
     print output_lines[i]; i+=1 # line with ---
     
     # next should begin with +++
-    if not output_lines[i].startswith("+++"):
+    if not output_lines[i].startswith("+++") and not output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
     print output_lines[i]; i+=1 # line with +++
     
-    # Now we start going through the hunks until we find a diff
-    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] != 'd':
+    # Now we start going through the hunks until we don't have a hunk starter mark
+    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@")):
         # hunk starts with a @
         i = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
     

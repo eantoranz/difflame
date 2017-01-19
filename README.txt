@@ -59,9 +59,10 @@ You can provide one or two treeishs. If you provide only one, HEAD will be assum
 
 You can also provide paths (which will be proxied into git diff) after --.
 
-Parameters can be sent to git diff by using option --diff-param (or -dp):
+Parameters can be sent to git diff by using option --diff-param (or -dp), for example:
+--diff-param=--color
 Multiple parameters are possible, each one having a separate --diff-param/-dp:
-Most times, different options will change diff output and it will break difflame (try -dp=--color)
+Most times, different options will change diff output and it will break difflame
 
 Parameters can be sent to git blame by using option --blame-param (or -bp), for example:
 --blame-param=-l
