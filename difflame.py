@@ -19,7 +19,7 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
-def get_blame_info_hunk(treeish, file_name, hunk_position, treeish2=None):
+def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_position, treeish2=None):
     """
     Get blame for especified hunk
     file_name will remove prepending 'a/' or '/b' if present
@@ -37,13 +37,20 @@ def get_blame_info_hunk(treeish, file_name, hunk_position, treeish2=None):
     if starting_line < 0:
         starting_line*=-1
     ending_line=starting_line+int(hunk_position[1])-1
-    if treeish2 == None:
-        return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
+    git_blame_opts=["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line)]
+    if treeish2 is None:
+        # normal blame on treeish1
+        git_blame_opts.append(treeish)
     else:
         # reverse blame
-        return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
+        git_blame_opts.extend(["--reverse", treeish2 + ".." + treeish])
+    
+    if len(blame_opts) > 0:
+        git_blame_opts.extend(blame_opts)
+    git_blame_opts.extend(["--", file_name])
+    return run_git_command(git_blame_opts)
 
-def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
+def process_hunk_from_diff_output(blame_params, output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
     Process a diff hunk from a file
     A hunk starts with a line that starts with @ and describes the position of the block of code in original file and ending file
@@ -80,9 +87,9 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
         i+=1
     
     # let's get blame information for final final
-    final_blame=get_blame_info_hunk(treeish2, final_name, final_file_hunk_pos).split("\n")
+    final_blame=get_blame_info_hunk(blame_params, treeish2, final_name, final_file_hunk_pos).split("\n")
     final_blame_index = 0
-    original_blame=get_blame_info_hunk(treeish2, final_name, original_file_hunk_pos, treeish1).split("\n")
+    original_blame=get_blame_info_hunk(blame_params, treeish2, final_name, original_file_hunk_pos, treeish1).split("\n")
     original_blame_index = 0
     for line in hunk_lines:
         if line[0] in [' ', '+']:
@@ -100,7 +107,7 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
     # hunk is finished (EOF, end of file or end of hunk)
     return i
 
-def process_file_from_diff_output(output_lines, starting_line):
+def process_file_from_diff_output(blame_params, output_lines, starting_line):
     """
     process diff output for a line.
     Will return position of next file in diff outtput
@@ -136,11 +143,11 @@ def process_file_from_diff_output(output_lines, starting_line):
     # Now we start going through the hunks until we find a diff
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] != 'd':
         # hunk starts with a @
-        i = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
+        i = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
     
     return i
 
-def process_diff_output(output, treeish1, treeish2):
+def process_diff_output(blame_params, output, treeish1, treeish2):
     """
     process diff output
     """
@@ -153,43 +160,47 @@ def process_diff_output(output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(lines, i)
+        i = process_file_from_diff_output(blame_params, lines, i)
 
-if len(sys.argv) < 3:
-    # not enough parameters
-    sys.stderr.write("Not enough parameters\n")
-    sys.stderr.write("Need to provide at least 2 treeishs to work on\n")
-    exit(1)
-
-# got at least two parameters
-# will probably have to go through all the parameters (when we have them) in order to parse them
-
-# additional parameters
-params=[]
+# parameters
+diff_params=[]
+blame_params=[]
 treeish1=None
 treeish2=None
-files=[]
+paths=[]
 
 double_dash=False # haven't found the double dash yet
 
-# process branches
+# process params
 for param in sys.argv[1:]:
     if double_dash:
         # it's a file path
-        files.append(param)
+        paths.append(param)
     else:
         # haven't found the double dash yet
-        if param.startswith('--'):
+        if param.startswith('--') or param.startswith("-dp") or param.startswith("-bp"):
             # double dash or parameter
             if (len(param) == 2):
                 # it's a --
                 double_dash=True
             else:
-                params.append(param)
+                # is it a diff param or a blame param?
+                if param.startswith("--diff-param=") or param.startswith("-dp="):
+                    # diff param
+                    diff_params.append(param[param.index('=') + 1:])
+                elif param.startswith("--blame-param=") or param.startswith("-bp="):
+                    blame_params.append(param[param.index('=') + 1:])
+                else:
+                    sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         else:
             # it's a branch
             treeish1=treeish2
             treeish2=param
+
+# if there's not at least a branch, we can't proceed
+if treeish1 is None and treeish2 is None:
+    sys.stderr.write("Didn't provide at least a treeish to work on\n")
+    sys.exit(1)
 
 if treeish1 is None:
     treeish1 = treeish2
@@ -197,15 +208,15 @@ if treeish1 is None:
 
 diff_output = None
 try:
-    diff_params=["diff"]
-    diff_params.extend(params)
-    diff_params.append(treeish1 + ".." + treeish2)
-    if len(files) > 0:
+    git_diff_params=["diff"]
+    git_diff_params.extend(diff_params)
+    git_diff_params.append(treeish1 + ".." + treeish2)
+    if len(paths) > 0:
         # only get diff for some paths
-        diff_params.append('--')
-        diff_params.extend(files)
+        git_diff_params.append('--')
+        git_diff_params.extend(paths)
         
-    diff_output = run_git_command(diff_params)
+    diff_output = run_git_command(git_diff_params)
 except:
     print "there was an error running git"
     import traceback
@@ -213,4 +224,4 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(diff_output, treeish1, treeish2)
+process_diff_output(blame_params, diff_output, treeish1, treeish2)
