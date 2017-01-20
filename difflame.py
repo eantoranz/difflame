@@ -45,8 +45,8 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original
     
     If original_treeish is set up, it means it's a reverse blame (to get deleted lines)
     """
-    # clean up file_name from prepending /a or /b (if present)
-    if file_name.startswith('a/') or file_name.startswith('b'):
+    # clean up file_name from prepending a/ or b/ (if present)
+    if file_name.startswith('a/') or file_name.startswith('b/'):
         file_name = file_name[2:]
     
     git_blame_opts=["blame", "--no-progress"]
