@@ -48,6 +48,9 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_position, treeish2=
     if file_name.startswith('a/') or file_name.startswith('b'):
         file_name = file_name[2:]
     hunk_position = hunk_position.split(',')
+    if len(hunk_position) == 1:
+        # there was a single number in file position (single line file), let's complete it with a 1
+        hunk_position.append("1")
     
     starting_line=int(hunk_position[0])
     if starting_line == 0:
@@ -99,7 +102,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     hunk_lines = []
     # let's get the lines until we get to next hunk, next file or EOF
     i+=1
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-', '\\'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
         # a valid line in the hunk
         hunk_lines.append(output_lines[i])
         i+=1
@@ -129,6 +132,9 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
             # print line from final blame with color adjusted
             print line[0:6] + original_blame[original_blame_index] + line[-3:]
             original_blame_index+=1
+        elif line[0]=='\\':
+            # print original line, nothing is added
+            print line
     
     # hunk is finished (EOF, end of file or end of hunk)
     return i
