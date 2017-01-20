@@ -48,16 +48,20 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_position, treeish2=
     if file_name.startswith('a/') or file_name.startswith('b'):
         file_name = file_name[2:]
     hunk_position = hunk_position.split(',')
-    if len(hunk_position) == 1:
-        # there was a single number in file position (single line file), let's complete it with a 1
-        hunk_position.append("1")
     
     starting_line=int(hunk_position[0])
     if starting_line == 0:
+        # no content
         return ""
     if starting_line < 0:
+        # original file position is negative
         starting_line*=-1
-    ending_line=starting_line+int(hunk_position[1])-1
+    
+    if len(hunk_position) == 1:
+        # single line file
+        ending_line = starting_line
+    else:
+        ending_line=starting_line+int(hunk_position[1])-1
     git_blame_opts=["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line)]
     if treeish2 is None:
         # normal blame on treeish1
