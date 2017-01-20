@@ -119,7 +119,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         i+=1
     
     # got to the end of the hunk
-    return (i, hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
+    return (hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
 
 def print_hunk(hunk_content, original_file_blame, final_file_blame):
     """
@@ -187,10 +187,11 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
         # found hunk mark (@)
-        (i, hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
+        (hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
         hunks.append(hunk_content)
         original_hunk_positions.append(hunk_positions[0])
         final_hunk_positions.append(hunk_positions[1])
+        i+=len(hunk_content)
     
     # pull blame from all hunks
     original_file_blame=get_blame_info_hunk(blame_opts, treeish2, original_name, original_hunk_positions, treeish1).split("\n")
