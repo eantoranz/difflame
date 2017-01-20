@@ -5,8 +5,9 @@ Released under the terms of GPLv2
 
 Show the output of diff with the additional information of blame
 
-options:
---color: diff output with color
+useful options:
+    --color: diff output with color
+    -w: skip space changes (both in diff and blame)
 
 Example output (from difflame project itself, two revisions apart, using blame params to change default output from git blame):
 

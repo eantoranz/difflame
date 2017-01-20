@@ -4,14 +4,10 @@
 # Copyright Edmundo Carmona Antoranz 2017
 # Released under the terms of GPLv2
 
-# for starters, will get 2 parameters: two treeishs to compare
-# For lines added, will use normal blame operation of the file
-# For lines removed, will use reverse blame operation
-
 import subprocess
 import sys
 
-# some color diff markers so that they don't have to be written over and over
+# some color diff markers so that they don't have to be written over and over again
 COLOR_DIFF_LINE_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"
 COLOR_TRIPLE_DASH_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"
 COLOR_TRIPLE_PLUS_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"
@@ -91,7 +87,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     
     if hunk_description_line[0] != '@' and not hunk_description_line.startswith(COLOR_HUNK_DESCRIPTOR_MARKER):
         # not the begining of a hunk
-        raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + ")")
+        raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + "): " + hunk_description_line[0])
     
     # ok.... got a hunk
     print hunk_description_line
@@ -108,7 +104,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         hunk_lines.append(output_lines[i])
         i+=1
     
-    # let's get blame information for final final
+    # let's get blame information for both hunks
     final_blame=get_blame_info_hunk(blame_params, treeish2, final_name, final_file_hunk_pos).split("\n")
     final_blame_index = 0
     original_blame=get_blame_info_hunk(blame_params, treeish2, final_name, original_file_hunk_pos, treeish1).split("\n")
@@ -140,7 +136,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
 def process_file_from_diff_output(blame_params, output_lines, starting_line):
     """
     process diff output for a line.
-    Will return position of next file in diff outtput
+    Will return position (index of line) of next file in diff outtput
     """
     # First is a 'diff' line
     i=starting_line
@@ -208,7 +204,7 @@ for param in sys.argv[1:]:
         paths.append(param)
     else:
         # haven't found the double dash yet
-        if param.startswith('--') or param.startswith("-dp") or param.startswith("-bp"):
+        if param.startswith('--') or param.startswith("-dp=") or param.startswith("-bp="):
             # double dash or parameter
             if (len(param) == 2):
                 # it's a --
@@ -224,13 +220,17 @@ for param in sys.argv[1:]:
                     blame_params.append(param[param.index('=') + 1:])
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
+        elif param == "-w":
+            # avoid space changes
+            blame_params.append(param)
+            diff_params.append(param)
         else:
             # it's a branch
             treeish1=treeish2
             treeish2=param
 
 # if there's not at least a branch, we can't proceed
-if treeish1 is None and treeish2 is None:
+if treeish2 is None:
     sys.stderr.write("Didn't provide at least a treeish to work on\n")
     sys.exit(1)
 
