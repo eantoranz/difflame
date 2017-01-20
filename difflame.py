@@ -59,11 +59,16 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original
             hunk_position.append("1")
         starting_line=int(hunk_position[0])
         if starting_line == 0:
-            # file doesn't exist exist
+            # file doesn't exist exist so no content
             return ""
         if starting_line < 0:
+            # original file starting line positions in hunk descriptors are negative
             starting_line*=-1
-        ending_line=starting_line+int(hunk_position[1])-1
+        if len(hunk_position) == 1:
+            # single line file
+            ending_line = starting_line
+        else:
+            ending_line=starting_line+int(hunk_position[1])-1
         git_blame_opts.extend(['-L', str(starting_line) + "," + str(ending_line)])
     if original_treeish is None:
         # normal blame on treeish1
