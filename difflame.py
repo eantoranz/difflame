@@ -7,7 +7,7 @@
 import subprocess
 import sys
 
-# some color diff markers so that they don't have to be written over and over again
+# color diff markers
 COLOR_DIFF_LINE_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"
 COLOR_TRIPLE_DASH_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"
 COLOR_TRIPLE_PLUS_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"
@@ -17,7 +17,7 @@ COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(
 
 def cleanup_filename(filename):
     """
-    There could be color markers on the filename... remove them
+    Remove color markers on a filename if present
     """
     index = filename.find(chr(0x1b))
     if index == -1:
@@ -40,17 +40,17 @@ def run_git_command(args):
 def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
     """
     Get blame for especified hunk positions
-    file_name will remove prepending 'a/' or '/b' if present
-    Hunk positions says starting line and size of hunk in lines
+    Prepending 'a/' or '/b' from file_name will be removed if present
+    Hunk positions especify starting line and size of hunk in lines
     
-    If original_treeish is set up, it means it's a reverse blame (to get deleted lines)
+    If original_treeish is set up, it means it's a reverse blame to get deleted lines
     """
     # clean up file_name from prepending a/ or b/ (if present)
     if file_name.startswith('a/') or file_name.startswith('b/'):
         file_name = file_name[2:]
     
+    # starting to build git command arguments
     git_blame_opts=["blame", "--no-progress"]
-    # let's add all positions
     
     for hunk_position in hunk_positions:
         hunk_position = hunk_position.split(',')
@@ -88,10 +88,10 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         - '-': Line was deleted
     Until we have a line that starts with a 'd' or a '@' (begining of new file or begining of new hunk)
     
-    Will return a tuple (position of next line on diff output, hunk content [raw] from diff, hunk positions and sizes [yet another tuple])
+    Will return a tuple (hunk content [raw] from diff, hunk positions and sizes [yet another tuple])
     """
     
-    # what will be returned (besides the position of the next line TODO position of next line can be inferred from size of hunk content)
+    # what will be returned
     hunk_content = []
     hunk_positions = [] # a pair with position,size of original file and final file
     
@@ -186,13 +186,13 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     original_hunk_positions = []
     final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
-        # hunk starts with a @
+        # found hunk mark (@)
         (i, hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
         hunks.append(hunk_content)
         original_hunk_positions.append(hunk_positions[0])
         final_hunk_positions.append(hunk_positions[1])
     
-    # now we pull blame from all hunks
+    # pull blame from all hunks
     original_file_blame=get_blame_info_hunk(blame_opts, treeish2, original_name, original_hunk_positions, treeish1).split("\n")
     final_file_blame=get_blame_info_hunk(blame_opts, treeish2, final_name, final_hunk_positions).split("\n")
     
