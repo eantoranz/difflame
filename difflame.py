@@ -37,31 +37,37 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
-def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_position, treeish2=None):
+def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
     """
-    Get blame for especified hunk
+    Get blame for especified hunk positions
     file_name will remove prepending 'a/' or '/b' if present
-    Hunk position says starting line and size of hunk in lines
+    Hunk positions says starting line and size of hunk in lines
     
-    If treeish2 is set up, it means it's a reverse blame (to get deleted lines)
+    If original_treeish is set up, it means it's a reverse blame (to get deleted lines)
     """
+    # clean up file_name from prepending /a or /b (if present)
     if file_name.startswith('a/') or file_name.startswith('b'):
         file_name = file_name[2:]
-    hunk_position = hunk_position.split(',')
     
-    starting_line=int(hunk_position[0])
-    if starting_line == 0:
-        return ""
-    if starting_line < 0:
-        starting_line*=-1
-    ending_line=starting_line+int(hunk_position[1])-1
-    git_blame_opts=["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line)]
-    if treeish2 is None:
+    git_blame_opts=["blame", "--no-progress"]
+    # let's add all positions
+    
+    for hunk_position in hunk_positions:
+        hunk_position = hunk_position.split(',')
+        starting_line=int(hunk_position[0])
+        if starting_line == 0:
+            # file doesn't exist exist
+            return ""
+        if starting_line < 0:
+            starting_line*=-1
+        ending_line=starting_line+int(hunk_position[1])-1
+        git_blame_opts.extend(['-L', str(starting_line) + "," + str(ending_line)])
+    if original_treeish is None:
         # normal blame on treeish1
         git_blame_opts.append(treeish)
     else:
         # reverse blame
-        git_blame_opts.extend(["--reverse", treeish2 + ".." + treeish])
+        git_blame_opts.extend(["--reverse", original_treeish + ".." + treeish])
     
     if len(blame_opts) > 0:
         git_blame_opts.extend(blame_opts)
@@ -78,7 +84,14 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         - '+': Line was added
         - '-': Line was deleted
     Until we have a line that starts with a 'd' or a '@' (begining of new file or begining of new hunk)
+    
+    Will return a tuple (position of next line on diff output, hunk content [raw] from diff, hunk positions and sizes [yet another tuple])
     """
+    
+    # what will be returned (besides the position of the next line TODO position of next line can be inferred from size of hunk content)
+    hunk_content = []
+    hunk_positions = [] # a pair with position,size of original file and final file
+    
     i = starting_line
     hunk_description_line = output_lines[i]
     if len(hunk_description_line) == 0:
@@ -89,51 +102,47 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         # not the begining of a hunk
         raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + "): " + hunk_description_line[0])
     
-    # ok.... got a hunk
-    print hunk_description_line
+    # description line for a hunk
+    hunk_content.append(hunk_description_line)
     
     hunk_description_info = hunk_description_line.split()
     original_file_hunk_pos = hunk_description_info[1]
     final_file_hunk_pos = hunk_description_info[2]
-    
-    hunk_lines = []
-    # let's get the lines until we get to next hunk, next file or EOF
+
     i+=1
     while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
         # a valid line in the hunk
-        hunk_lines.append(output_lines[i])
+        hunk_content.append(output_lines[i])
         i+=1
     
-    # let's get blame information for both hunks
-    final_blame=get_blame_info_hunk(blame_params, treeish2, final_name, final_file_hunk_pos).split("\n")
-    final_blame_index = 0
-    original_blame=get_blame_info_hunk(blame_params, treeish2, final_name, original_file_hunk_pos, treeish1).split("\n")
-    original_blame_index = 0
-    for line in hunk_lines:
+    # got to the end of the hunk
+    return (i, hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
+
+def print_hunk(hunk_content, original_file_blame, final_file_blame):
+    """
+    Print hunk on difflame output
+    """
+    print hunk_content[0]
+    for line in hunk_content[1:]:
         if line[0] in [' ', '+']:
             # print line from final blame
-            print line[0] + final_blame[final_blame_index]
-            final_blame_index+=1
+            print line[0] + final_file_blame.pop(0)
             if line[0] == ' ':
                 # also move on the original_blame
-                original_blame_index+=1
+                original_file_blame.pop(0)
         elif line.startswith(COLOR_LINE_ADDED_MARKER):
             # print line from final blame with color adjusted
-            print line[0:6] + final_blame[final_blame_index] + line[-3:]
-            final_blame_index+=1
+            print line[0:6] + final_file_blame.pop(0) + line[-3:]
         elif line[0] == '-':
             # it's a line that was deleted so have to pull it from the original_blame
-            print line[0] + original_blame[original_blame_index]
-            original_blame_index+=1
+            print line[0] + original_file_blame.pop(0)
         elif line.startswith(COLOR_LINE_REMOVED_MARKER):
             # print line from final blame with color adjusted
-            print line[0:6] + original_blame[original_blame_index] + line[-3:]
-            original_blame_index+=1
+            print line[0:6] + original_file_blame.pop(0) + line[-3:]
     
-    # hunk is finished (EOF, end of file or end of hunk)
-    return i
+    # done printing the hunk
 
-def process_file_from_diff_output(blame_params, output_lines, starting_line):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -167,9 +176,24 @@ def process_file_from_diff_output(blame_params, output_lines, starting_line):
     print output_lines[i]; i+=1 # line with +++
     
     # Now we start going through the hunks until we don't have a hunk starter mark
+    hunks = []
+    original_hunk_positions = []
+    final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
         # hunk starts with a @
-        i = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
+        (i, hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
+        hunks.append(hunk_content)
+        original_hunk_positions.append(hunk_positions[0])
+        final_hunk_positions.append(hunk_positions[1])
+    
+    # now we pull blame from all hunks
+    original_file_blame=get_blame_info_hunk(blame_opts, treeish2, original_name, original_hunk_positions, treeish1).split("\n")
+    final_file_blame=get_blame_info_hunk(blame_opts, treeish2, final_name, final_hunk_positions).split("\n")
+    
+    # print hunks
+    for hunk_content in hunks:
+        print_hunk(hunk_content, original_file_blame, final_file_blame)
+    
     
     return i
 
@@ -186,7 +210,7 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2)
 
 # parameters
 diff_params=[]
