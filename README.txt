@@ -6,7 +6,10 @@ Released under the terms of GPLv2
 Show the output of diff with the additional information of blame
 
 useful options:
-    --color: diff output with color
+    --color/--no-color: output with/without color
+        if user doesn't specify --color/--no-color options (directly or thorugh --diff-param)
+        then output will use color if process is connected to a terminal
+        
     -w: skip space changes (both in diff and blame)
 
 Example output (from difflame project itself, two revisions apart, using blame params to change default output from git blame):

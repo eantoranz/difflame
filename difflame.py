@@ -222,6 +222,7 @@ paths=[]
 double_dash=False # haven't found the double dash yet
 
 # process params
+color_set=False # color option hasn't been set by user
 for param in sys.argv[1:]:
     if double_dash:
         # it's a file path
@@ -234,12 +235,17 @@ for param in sys.argv[1:]:
                 # it's a --
                 double_dash=True
             else:
-                if param=="--color":
-                    diff_params.append("--color") # use diff color output
+                if param in ["--color", "--no-color"]:
+                    # set up color output forcibly
+                    diff_params.append(param)
+                    color_set=True
                 # is it a diff param or a blame param?
                 elif param.startswith("--diff-param=") or param.startswith("-dp="):
                     # diff param
-                    diff_params.append(param[param.index('=') + 1:])
+                    diff_param=param[param.index('=') + 1:]
+                    diff_params.append(diff_param)
+                    if diff_param in ["--color", "--no-color"]: # another way to set color
+                        color_set=True
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
                 else:
@@ -252,6 +258,11 @@ for param in sys.argv[1:]:
             # it's a branch
             treeish1=treeish2
             treeish2=param
+
+if not color_set:
+    # if the user is using a terminal, will use color output
+    if sys.stdout.isatty():
+        diff_params.append("--color")
 
 # if there's not at least a branch, we can't proceed
 if treeish2 is None:
