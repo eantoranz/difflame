@@ -344,12 +344,23 @@ for param in sys.argv[1:]:
             blame_params.append(param)
             diff_params.append(param)
         else:
+            # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
             if treeish1 is not None:
                 # already had 2 treeishes set up
                 raise Exception("Already have 2 treeishes to work on: " + treeish1 + ".." + treeish2)
-            # it's a treeish
-            treeish1=treeish2
-            treeish2=param
+            double_dot_index=param.find('..')
+            if double_dot_index==-1:
+                # single treeish
+                treeish1=treeish2
+                treeish2=param
+            else:
+                # passing both treeishes in a single shot
+                if treeish2 is not None:
+                    # already had at least a treeish set up
+                    raise Exception("Already had at least a treeish to work on defined: " + treeish2)
+                treeish1=param[0:double_dot_index]
+                treeish2=param[double_dot_index+2:]
+                
 
 if not color_set:
     # if the user is using a terminal, will use color output
