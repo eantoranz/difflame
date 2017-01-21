@@ -104,7 +104,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         - '-': Line was deleted
     Until we have a line that starts with a 'd' or a '@' (begining of new file or begining of new hunk)
     
-    Will return a tuple (hunk content [raw] from diff, hunk positions and sizes [yet another tuple])
+    Will return a tuple (hunk content [raw] from diff, hunk positions and sizes [original position, final position])
     """
     
     # what will be returned
@@ -115,7 +115,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     hunk_description_line = output_lines[i]
     if len(hunk_description_line) == 0:
         # reached EOF, probably
-        return i+1
+        return ("", ["0", "0"]) # return something with tht expected structure, just in case
     
     if hunk_description_line[0] != '@' and not hunk_description_line.startswith(COLOR_HUNK_DESCRIPTOR_MARKER):
         # not the begining of a hunk
