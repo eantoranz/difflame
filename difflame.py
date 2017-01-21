@@ -344,7 +344,10 @@ for param in sys.argv[1:]:
             blame_params.append(param)
             diff_params.append(param)
         else:
-            # it's a branch
+            if treeish1 is not None:
+                # already had 2 treeishes set up
+                raise Exception("Already have 2 treeishes to work on: " + treeish1 + ".." + treeish2)
+            # it's a treeish
             treeish1=treeish2
             treeish2=param
 
@@ -353,7 +356,7 @@ if not color_set:
     if sys.stdout.isatty():
         diff_params.append("--color")
 
-# if there's not at least a branch, we can't proceed
+# if there's not at least a treeish, we can't proceed
 if treeish2 is None:
     sys.stderr.write("Didn't provide at least a treeish to work on\n")
     sys.exit(1)
