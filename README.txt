@@ -5,7 +5,8 @@ Released under the terms of GPLv2
 
 Show the output of diff with the additional information of blame
 
-Example output (from difflame project itself, two revisions apart, using blame params to change default output from git blame):
+Example output (from difflame project itself, two revisions apart, using blame
+params to change default output from git blame):
 
 $ difflame.py -bp=-t -bp=-e 3d426842 6e2bfb8f
 diff --git a/difflame.py b/difflame.py
@@ -52,34 +53,41 @@ index f6e879b..e3a2b65 100755
 
 
 
-Lines that remain the same or that were added will indicate when those lines were 'added' to the file
-Lines that were removed will display the last revision where those lines were _present_ on the file (as provided by git blame --reverse)
+Lines that remain the same or that were added will indicate when those lines
+were 'added' to the file.
+Lines that were removed will display the last revision where those lines were
+_present_ on the file (as provided by git blame --reverse).
 
-You can provide one or two treeishs. If you provide only one, HEAD will be assumed to be the second treeish.
+You can provide one or two treeishs. If you provide only one, HEAD will be
+assumed to be the second treeish.
 
 You can also provide paths (which will be proxied into git diff) after --.
 
-Parameters can be sent to git diff by using option --diff-param (or -dp), for example:
---diff-param=--color
-Multiple parameters are possible, each one having a separate --diff-param/-dp:
+Parameters can be sent to git diff by using option --diff-param (or -dp), for
+example:
+    --diff-param=--color
+Multiple parameters are possible, each one having a separate --diff-param/-dp.
 Most times, different options will change diff output and it will break difflame
 
-Parameters can be sent to git blame by using option --blame-param (or -bp), for example:
---blame-param=-l
--bp=-t
+Parameters can be sent to git blame by using option --blame-param (or -bp), for
+example:
+    --blame-param=-l
+    -bp=-t
 Multiple parameters are possible, each one having a separate --blame-param/-bp:
---blame-param=-l -bp=-t
+    --blame-param=-l -bp=-t
 
 useful options:
     --color/--no-color: output with/without color
-        if user doesn't specify --color/--no-color options (directly or thorugh --diff-param)
-        then output will use color if process is connected to a terminal
+        if user doesn't specify --color/--no-color options (directly or thorugh
+        --diff-param) then output will use color if process is connected to a
+        terminal
         
     -w: skip space changes (both in diff and blame)
     
-    --tips: when printing added lines, provide the tip (one-line summary of the revision) before the lines
-        if a number of added lines belong to the same revision one after the other, a single tip line 
-        will be printed before them
+    --tips: when printing added lines, provide the tip (one-line summary of the revision)
+        before the lines themselves.
+        if a number of added lines belong to the same revision one after the other, a single
+        tip line will be printed before them.
         It would look something like this (taken from git project):
             diff --git a/fast-import.c b/fast-import.c
             index f561ba833..64fe602f0 100644
