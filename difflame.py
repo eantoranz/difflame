@@ -143,13 +143,29 @@ def get_revision_from_added_line(line):
     """
     return line[:line.index(' ')]
 
-def print_revision_line(revision, tips, use_color):
+def print_revision_line(blame_line, previous_revision, tips, use_color):
     """
-    Print tip line
+    Print tip line if tips are enabled
+    
+    if tips are disabled, nothing will be done
     
     Will check tips dictionary for revision.
     If it's not there, will ask git for it and add it to the tips dictionary.
+    
+    will return current revision (None if tips are disabled)
     """
+    # have to process revision to see it we need to print tip before the revision
+    if tips is None:
+        # not using tips, nothing to do
+        return None
+    
+    # get revision
+    revision=get_revision_from_added_line(blame_line)
+    if previous_revision is not None and revision == previous_revision:
+        # same revision, nothing todo
+        return revision
+    
+    # have to print tip
     tip=None
     if not revision in tips:
         # have to get tip from git and add it to tips
@@ -161,6 +177,9 @@ def print_revision_line(revision, tips, use_color):
     if (use_color):
         sys.stdout.write(COLOR_GREEN)
     sys.stdout.write(tip + "\n")
+    
+    # return revision
+    return revision
     
 
 def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
@@ -175,14 +194,7 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
             # print line from final blame
             blame_line = final_file_blame.pop(0)
             if line[0] == '+':
-                # have to process revision to see it we need to print tip before the revision
-                if tips is not None:
-                    # we are using tips
-                    revision=get_revision_from_added_line(blame_line)
-                    if previous_revision is None or previous_revision != revision:
-                        # have to print the tip
-                        print_revision_line(revision, tips, False)
-                        previous_revision=revision
+                previous_revision = print_revision_line(blame_line, previous_revision, tips, False)
             else:
                 # move on the original_blame cause we got blame info from final_file_blame
                 original_file_blame.pop(0)
@@ -192,13 +204,7 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
         elif line.startswith(COLOR_LINE_ADDED_MARKER):
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print tip before the revision
-            if tips is not None:
-                # we are using tips
-                revision=get_revision_from_added_line(blame_line)
-                if previous_revision is None or previous_revision != revision:
-                    # have to print the tip
-                    print_revision_line(revision, tips, True)
-                    previous_revision=revision
+            previous_revision = print_revision_line(blame_line, previous_revision, tips, True)
             # print line from final blame with color adjusted
             print line[0:6] + blame_line + line[-3:]
         elif line[0] == '-':
