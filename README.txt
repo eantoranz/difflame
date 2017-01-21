@@ -5,13 +5,6 @@ Released under the terms of GPLv2
 
 Show the output of diff with the additional information of blame
 
-useful options:
-    --color/--no-color: output with/without color
-        if user doesn't specify --color/--no-color options (directly or thorugh --diff-param)
-        then output will use color if process is connected to a terminal
-        
-    -w: skip space changes (both in diff and blame)
-
 Example output (from difflame project itself, two revisions apart, using blame params to change default output from git blame):
 
 $ difflame.py -bp=-t -bp=-e 3d426842 6e2bfb8f
@@ -77,3 +70,39 @@ Parameters can be sent to git blame by using option --blame-param (or -bp), for 
 Multiple parameters are possible, each one having a separate --blame-param/-bp:
 --blame-param=-l -bp=-t
 
+useful options:
+    --color/--no-color: output with/without color
+        if user doesn't specify --color/--no-color options (directly or thorugh --diff-param)
+        then output will use color if process is connected to a terminal
+        
+    -w: skip space changes (both in diff and blame)
+    
+    --tips: when printing added lines, provide the tip (one-line summary of the revision) before the lines
+        if a number of added lines belong to the same revision one after the other, a single tip line 
+        will be printed before them
+        It would look something like this (taken from git project):
+            diff --git a/fast-import.c b/fast-import.c
+            index f561ba833..64fe602f0 100644
+            --- a/fast-import.c
+            +++ b/fast-import.c
+            @@ -2218,13 +2218,17 @@ static uintmax_t do_change_note_fanout(
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2218)              char *fullpath, unsigned int fullpath_len,
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2219)              unsigned char fanout)
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2220) {
+            -02d0457eb4 (Junio C Hamano 2017-01-10 15:24:26 -0800 2221)     struct tree_content *t = root->tree;
+                    405d7f4af fast-import: properly fanout notes when tree is imported
+            +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2221)      struct tree_content *t;
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2222)      struct tree_entry *e, leaf;
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2223)      unsigned int i, tmp_hex_sha1_len, tmp_fullpath_len;
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2224)      uintmax_t num_notes = 0;
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2225)      unsigned char sha1[20];
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2226)      char realpath[60];
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2227) 
+                    405d7f4af fast-import: properly fanout notes when tree is imported
+            +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2228)      if (!root->tree)
+            +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2229)              load_tree(root);
+            +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2230)      t = root->tree;
+            +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2231) 
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2232)      for (i = 0; t && i < t->entry_count; i++) {
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2233)              e = t->entries[i];
+            2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2234)              tmp_hex_sha1_len = hex_sha1_len + e->name->str_len;

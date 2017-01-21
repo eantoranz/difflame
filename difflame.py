@@ -7,12 +7,17 @@
 import subprocess
 import sys
 
+# color codes
+COLOR_GREEN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d)
+COLOR_RED=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d)
+COLOR_WHITE=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d)
+
 # color diff markers
-COLOR_DIFF_LINE_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d) + "diff"
-COLOR_TRIPLE_DASH_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "---"
-COLOR_TRIPLE_PLUS_MARKER=chr(0x1b) + chr(0x5b) + chr(0x31)+ chr(0x6d) + "+++"
-COLOR_LINE_ADDED_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d) + '+'
-COLOR_LINE_REMOVED_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d) + '-'
+COLOR_DIFF_LINE_MARKER=COLOR_WHITE + "diff"
+COLOR_TRIPLE_DASH_MARKER=COLOR_WHITE + "---"
+COLOR_TRIPLE_PLUS_MARKER=COLOR_WHITE + "+++"
+COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
+COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
 COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
 def cleanup_filename(filename):
@@ -36,6 +41,12 @@ def run_git_command(args):
     command = ["git"]
     command.extend(args)
     return subprocess.check_output(command)
+
+def git_revision_tip(revision):
+    """
+    get revision tip from git (will include ending \n)
+    """
+    return run_git_command(["show", "--oneline", "--no-color", "--summary", revision])
 
 def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
     """
@@ -126,34 +137,90 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     # got to the end of the hunk
     return (hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
 
-def print_hunk(hunk_content, original_file_blame, final_file_blame):
+def get_revision_from_added_line(line):
+    """
+    Return the revision id from an added line
+    """
+    temp = line[:line.index(' ')] # let's not change the original line
+    return temp
+
+def print_revision_line(revision, tips, use_color):
+    """
+    Print tip line
+    
+    Will check tips dictionary for revision.
+    If it's not there, will ask git for it and add it to the tips dictionary.
+    """
+    tip=None
+    if not revision in tips:
+        # have to get tip from git and add it to tips
+        tip=git_revision_tip(revision)
+        tips[revision]=tip
+    else:
+        tip=tips[revision]
+    sys.stderr.write("\t")
+    if (use_color):
+        sys.stderr.write(COLOR_GREEN)
+    sys.stderr.write(tip) # tip has \n at the end
+    
+
+def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
     """
     Print hunk on difflame output
     """
-    print hunk_content[0]
+    print hunk_content[0] # hunk descrtiptor line
+    previous_revision=None
     for line in hunk_content[1:]:
         if line[0] in [' ', '+']:
+            # added line (no color) or unchanged line
             # print line from final blame
-            print line[0] + final_file_blame.pop(0)
-            if line[0] == ' ':
-                # also move on the original_blame
+            blame_line = final_file_blame.pop(0)
+            if line[0] == '+':
+                # have to process revision to see it we need to print tip before the revision
+                if tips is not None:
+                    # we are using tips
+                    revision=get_revision_from_added_line(blame_line)
+                    if previous_revision is None or previous_revision != revision:
+                        # have to print the tip
+                        print_revision_line(revision, tips, False)
+                        previous_revision=revision
+            else:
+                # move on the original_blame cause we got blame info from final_file_blame
                 original_file_blame.pop(0)
+                # reset previous revision
+                previous_revision=None
+            print line[0] + blame_line
         elif line.startswith(COLOR_LINE_ADDED_MARKER):
+            blame_line = final_file_blame.pop(0)
+            # have to process revision to see it we need to print tip before the revision
+            if tips is not None:
+                # we are using tips
+                revision=get_revision_from_added_line(blame_line)
+                if previous_revision is None or previous_revision != revision:
+                    # have to print the tip
+                    print_revision_line(revision, tips, True)
+                    previous_revision=revision
             # print line from final blame with color adjusted
-            print line[0:6] + final_file_blame.pop(0) + line[-3:]
+            print line[0:6] + blame_line + line[-3:]
         elif line[0] == '-':
             # it's a line that was deleted so have to pull it from the original_blame
             print line[0] + original_file_blame.pop(0)
+            # reset previous revision
+            previous_revision=None
         elif line.startswith(COLOR_LINE_REMOVED_MARKER):
             # print line from final blame with color adjusted
             print line[0:6] + original_file_blame.pop(0) + line[-3:]
+            # reset previous revision
+            previous_revision=None
         elif line[0]=='\\':
             # print original line, nothing is added
             print line
+            # reset previous revision
+            previous_revision=None
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, tips):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -204,15 +271,19 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(hunk_content, original_file_blame, final_file_blame)
+        print_hunk(hunk_content, original_file_blame, final_file_blame, tips)
     
     
     return i
 
-def process_diff_output(blame_params, output, treeish1, treeish2):
+def process_diff_output(options, blame_params, output, treeish1, treeish2):
     """
     process diff output
     """
+    # when using tips, will have a dictionary with the tip of each revision (so that they are only looked for once)
+    tips=None
+    if options['TIPS']:
+        tips=dict()
     
     # process files until output is finished
     lines=output.split("\n")
@@ -222,7 +293,12 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, tips)
+
+# general options for difflame
+# TIPS: use tips
+options=dict()
+options['TIPS']=False # no tips
 
 # parameters
 diff_params=[]
@@ -260,6 +336,8 @@ for param in sys.argv[1:]:
                         color_set=True
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
+                elif param == "--tips":
+                    options['TIPS']=True
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
@@ -303,4 +381,4 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(blame_params, diff_output, treeish1, treeish2)
+process_diff_output(options, blame_params, diff_output, treeish1, treeish2)
