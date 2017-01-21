@@ -282,7 +282,7 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
     """
     # when using tips, will have a dictionary with the tip of each revision (so that they are only looked for once)
     tips=None
-    if 'TIPS' in options:
+    if options['TIPS']:
         tips=dict()
     
     # process files until output is finished
@@ -297,7 +297,8 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
 
 # general options for difflame
 # TIPS: use tips
-options=[]
+options=dict()
+options['TIPS']=False # no tips
 
 # parameters
 diff_params=[]
@@ -336,8 +337,7 @@ for param in sys.argv[1:]:
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
                 elif param == "--tips":
-                    if 'TIPS' not in options:
-                        options.append('TIPS')
+                    options['TIPS']=True
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
