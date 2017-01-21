@@ -44,9 +44,9 @@ def run_git_command(args):
 
 def git_revision_tip(revision):
     """
-    get revision tip from git (will include ending \n)
+    get revision tip from git (won't include ending \n)
     """
-    return run_git_command(["show", "--oneline", "--no-color", "--summary", revision])
+    return run_git_command(["show", "--oneline", "--no-color", "--summary", revision]).split("\n")[0]
 
 def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
     """
@@ -158,10 +158,10 @@ def print_revision_line(revision, tips, use_color):
         tips[revision]=tip
     else:
         tip=tips[revision]
-    sys.stderr.write("\t")
+    sys.stdout.write("\t")
     if (use_color):
-        sys.stderr.write(COLOR_GREEN)
-    sys.stderr.write(tip) # tip has \n at the end
+        sys.stdout.write(COLOR_GREEN)
+    sys.stdout.write(tip + "\n")
     
 
 def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
