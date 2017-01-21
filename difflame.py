@@ -141,8 +141,7 @@ def get_revision_from_added_line(line):
     """
     Return the revision id from an added line
     """
-    temp = line[:line.index(' ')] # let's not change the original line
-    return temp
+    return line[:line.index(' ')]
 
 def print_revision_line(revision, tips, use_color):
     """
