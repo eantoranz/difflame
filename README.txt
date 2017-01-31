@@ -84,10 +84,10 @@ useful options:
         
     -w: skip space changes (both in diff and blame)
     
-    --tips: when printing added lines, provide the tip (one-line summary of the revision)
+    --hints: when printing added lines, provide the hint (one-line summary of the revision)
         before the lines themselves.
         if a number of added lines belong to the same revision one after the other, a single
-        tip line will be printed before them.
+        hint line will be printed before them.
         It would look something like this (taken from git project):
             diff --git a/fast-import.c b/fast-import.c
             index f561ba833..64fe602f0 100644

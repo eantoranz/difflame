@@ -42,9 +42,9 @@ def run_git_command(args):
     command.extend(args)
     return subprocess.check_output(command)
 
-def git_revision_tip(revision):
+def git_revision_hint(revision):
     """
-    get revision tip from git (won't include ending \n)
+    get revision hint from git (won't include ending \n)
     """
     return run_git_command(["show", "--oneline", "--no-color", "--summary", revision]).split("\n")[0]
 
@@ -143,20 +143,20 @@ def get_revision_from_added_line(line):
     """
     return line[:line.index(' ')]
 
-def print_revision_line(blame_line, previous_revision, tips, use_color):
+def print_revision_line(blame_line, previous_revision, hints, use_color):
     """
-    Print tip line if tips are enabled
+    Print hint line if hints are enabled
     
-    if tips are disabled, nothing will be done
+    if hints are disabled, nothing will be done
     
-    Will check tips dictionary for revision.
-    If it's not there, will ask git for it and add it to the tips dictionary.
+    Will check hints dictionary for revision.
+    If it's not there, will ask git for it and add it to the hints dictionary.
     
-    will return current revision (None if tips are disabled)
+    will return current revision (None if hints are disabled)
     """
-    # have to process revision to see it we need to print tip before the revision
-    if tips is None:
-        # not using tips, nothing to do
+    # have to process revision to see it we need to print hint before the revision
+    if hints is None:
+        # not using hints, nothing to do
         return None
     
     # get revision
@@ -165,24 +165,24 @@ def print_revision_line(blame_line, previous_revision, tips, use_color):
         # same revision, nothing todo
         return revision
     
-    # have to print tip
-    tip=None
-    if not revision in tips:
-        # have to get tip from git and add it to tips
-        tip=git_revision_tip(revision)
-        tips[revision]=tip
+    # have to print hint
+    hint=None
+    if not revision in hints:
+        # have to get hint from git and add it to hints
+        hint=git_revision_hint(revision)
+        hints[revision]=hint
     else:
-        tip=tips[revision]
+        hint=hints[revision]
     sys.stdout.write("\t")
     if (use_color):
         sys.stdout.write(COLOR_GREEN)
-    sys.stdout.write(tip + "\n")
+    sys.stdout.write(hint + "\n")
     
     # return revision
     return revision
     
 
-def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
+def print_hunk(hunk_content, original_file_blame, final_file_blame, hints):
     """
     Print hunk on difflame output
     """
@@ -194,7 +194,7 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
             # print line from final blame
             blame_line = final_file_blame.pop(0)
             if line[0] == '+':
-                previous_revision = print_revision_line(blame_line, previous_revision, tips, False)
+                previous_revision = print_revision_line(blame_line, previous_revision, hints, False)
             else:
                 # move on the original_blame cause we got blame info from final_file_blame
                 original_file_blame.pop(0)
@@ -203,8 +203,8 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
             print line[0] + blame_line
         elif line.startswith(COLOR_LINE_ADDED_MARKER):
             blame_line = final_file_blame.pop(0)
-            # have to process revision to see it we need to print tip before the revision
-            previous_revision = print_revision_line(blame_line, previous_revision, tips, True)
+            # have to process revision to see it we need to print hint before the revision
+            previous_revision = print_revision_line(blame_line, previous_revision, hints, True)
             # print line from final blame with color adjusted
             print line[0:6] + blame_line + line[-3:]
         elif line[0] == '-':
@@ -225,7 +225,7 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, tips):
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, tips):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, hints):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -276,7 +276,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(hunk_content, original_file_blame, final_file_blame, tips)
+        print_hunk(hunk_content, original_file_blame, final_file_blame, hints)
     
     
     return i
@@ -285,10 +285,10 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
     """
     process diff output
     """
-    # when using tips, will have a dictionary with the tip of each revision (so that they are only looked for once)
-    tips=None
-    if options['TIPS']:
-        tips=dict()
+    # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
+    hints=None
+    if options['HINTS']:
+        hints=dict()
     
     # process files until output is finished
     lines=output.split("\n")
@@ -298,12 +298,12 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, tips)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints)
 
 # general options for difflame
-# TIPS: use tips
+# HINTS: use hints (1-line summary of a revision)
 options=dict()
-options['TIPS']=False # no tips
+options['HINTS']=False # no hints
 
 # parameters
 diff_params=[]
@@ -341,8 +341,8 @@ for param in sys.argv[1:]:
                         color_set=True
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
-                elif param == "--tips":
-                    options['TIPS']=True
+                elif param in ["--tips", "--hints"]:
+                    options['HINTS']=True
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
