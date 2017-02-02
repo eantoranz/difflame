@@ -21,6 +21,9 @@ COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
 COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
 COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
+DEBUG_GIT = False
+TOTAL_GIT_EXECUTIONS = 0
+
 def cleanup_filename(filename):
     """
     Remove color markers on a filename if present
@@ -36,11 +39,15 @@ def cleanup_filename(filename):
     return filename
 
 def run_git_command(args):
+    global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
     """
     Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
     """
     command = ["git"]
     command.extend(args)
+    if DEBUG_GIT:
+        TOTAL_GIT_EXECUTIONS+=1
+        sys.stderr.write("git execution: " + str(command) + "\n")
     return subprocess.check_output(command)
 
 def git_revision_hint(revision):
@@ -440,6 +447,8 @@ for param in sys.argv[1:]:
                     blame_params.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
                     options['HINTS']=True
+                elif param == "--git-debug":
+                    DEBUG_GIT = True
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
@@ -498,3 +507,6 @@ except:
 
 # processing diff output
 process_diff_output(options, blame_params, diff_output, treeish1, treeish2)
+
+if DEBUG_GIT:
+    sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
