@@ -315,25 +315,20 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
             (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
+            # print hint if needed
+            print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
             if found_real_revision:
-                print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
                 # got the revision where the line was deleted... let's show it
                 print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color)
-                sys.stdout.write(blame_line[blame_line.find(' '):])
-                if use_color:
-                    sys.stdout.write(COLOR_RESET)
-                previous_revision = deletion_revision
-                print ""
             else:
-                # let's print original line for the time being
-                print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
-                # got the revision where the line was deleted... let's show it
+                # didn't find the revision where the line was deleted... let's show it with the original revision
                 print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color, original_revision)
-                sys.stdout.write(blame_line[blame_line.find(' '):])
-                if use_color:
-                    sys.stdout.write(COLOR_RESET)
-                previous_revision = deletion_revision
-                print ""
+            # line number and content
+            sys.stdout.write(blame_line[blame_line.find(' '):])
+            if use_color:
+                sys.stdout.write(COLOR_RESET)
+            previous_revision = deletion_revision
+            print ""
         elif line[0]=='\\':
             # print original line, nothing is added
             print line
