@@ -76,9 +76,9 @@ example:
 Multiple parameters are possible, each one having a separate --blame-param/-bp:
     --blame-param=-l -bp=-t
 
-useful options:
+options:
     --color/--no-color: output with/without color
-        if user doesn't specify --color/--no-color options (directly or thorugh
+        if user doesn't specify --color/--no-color options (directly or through
         --diff-param) then output will use color if process is connected to a
         terminal
         
@@ -114,3 +114,8 @@ useful options:
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2232)      for (i = 0; t && i < t->entry_count; i++) {
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2233)              e = t->entries[i];
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2234)              tmp_hex_sha1_len = hex_sha1_len + e->name->str_len;
+
+    --git-debug
+        print debug information about git on stderr:
+            - executed commands
+            - total commands run
