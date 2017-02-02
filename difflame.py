@@ -11,6 +11,7 @@ import sys
 COLOR_GREEN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d)
 COLOR_RED=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d)
 COLOR_WHITE=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d)
+COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 
 # color diff markers
 COLOR_DIFF_LINE_MARKER=COLOR_WHITE + "diff"
@@ -191,14 +192,13 @@ def print_revision_line(current_revision, previous_revision, hints, adding_line,
     else:
         hint=hints[current_revision]
     sys.stdout.write("\t")
-    if (use_color):
-        color = None
-        if (adding_line):
-            color = COLOR_GREEN
-        else:
-            color = COLOR_RED
-        sys.stdout.write(color)
-    sys.stdout.write(hint + "\n")
+    if use_color:
+        sys.stdout.write(COLOR_WHITE)
+    sys.stdout.write(hint)
+    if use_color:
+        sys.stdout.write(COLOR_RESET)
+    print ""
+    
     return current_revision
 
 def revisions_pointing(child_revisions_cache, target_revision, starting_from):
