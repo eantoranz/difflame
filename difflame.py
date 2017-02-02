@@ -21,12 +21,12 @@ COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
 COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
 COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
-# general options for difflame
+# general OPTIONS for difflame
 # HINTS: use hints (1-line summary of a revision)
 # COLOR: use color on output
-options=dict()
-options['HINTS']=False # no hints
-options['COLOR']=False
+OPTIONS=dict()
+OPTIONS['HINTS']=False # no hints
+OPTIONS['COLOR']=False
 
 
 DEBUG_GIT = False
@@ -207,10 +207,10 @@ def print_revision_line(current_revision, previous_revision, hints, adding_line)
     else:
         hint=hints[current_revision]
     sys.stdout.write("\t")
-    if options['COLOR']:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_WHITE)
     sys.stdout.write(hint)
-    if options['COLOR']:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RESET)
     print ""
     
@@ -281,7 +281,7 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, original_revi
     else:
         info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
         revisions_info_cache[revision_id] = info
-    if options['COLOR']:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
     if original_revision is not None:
         sys.stdout.write("-" + original_revision + info[info.index(' '):])
@@ -310,10 +310,10 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             current_revision = process_added_line(blame_line, revisions_cache)
             previous_revision = print_revision_line(current_revision, previous_revision, hints, True)
             # print line from final blame with color adjusted
-            if options['COLOR']:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_LINE_ADDED_MARKER)
             sys.stdout.write(blame_line)
-            if options['COLOR']:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
             print ""
         elif line[0] == '-':
@@ -331,7 +331,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
                 print_deleted_revision_info(revisions_info_cache, deletion_revision, original_revision)
             # line number and content
             sys.stdout.write(blame_line[blame_line.find(' '):])
-            if options['COLOR']:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
             previous_revision = deletion_revision
             print ""
@@ -405,7 +405,7 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
     """
     # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
     hints=None
-    if options['HINTS']:
+    if OPTIONS['HINTS']:
         hints=dict()
     
     # process files until output is finished
@@ -452,7 +452,7 @@ for param in sys.argv[1:]:
             else:
                 if param in ["--color", "--no-color"]:
                     # set up color output forcibly
-                    options['COLOR'] = (param == "--color")
+                    OPTIONS['COLOR'] = (param == "--color")
                     color_set=True
                 # is it a diff param or a blame param?
                 elif param.startswith("--diff-param=") or param.startswith("-dp="):
@@ -462,7 +462,7 @@ for param in sys.argv[1:]:
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
-                    options['HINTS']=True
+                    OPTIONS['HINTS']=True
                 elif param == "--git-debug":
                     DEBUG_GIT = True
                 else:
@@ -493,7 +493,7 @@ for param in sys.argv[1:]:
 if not color_set:
     # if the user is using a terminal, will use color output
     if sys.stdout.isatty():
-        options['COLOR'] = True
+        OPTIONS['COLOR'] = True
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
