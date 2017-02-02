@@ -244,7 +244,7 @@ def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, t
         return revisions_pointing_to[0]
     return None # when many merges are involved, it will take more analysis to figure out
 
-def print_deleted_revision_info(revisions_info_cache, revision_id):
+def print_deleted_revision_info(revisions_info_cache, revision_id, use_color):
     """
     Print revision information for a deleled line
     """
@@ -254,6 +254,8 @@ def print_deleted_revision_info(revisions_info_cache, revision_id):
     else:
         info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
         revisions_info_cache[revision_id] = info
+    if use_color:
+        sys.stdout.write(COLOR_RED)
     sys.stdout.write(info)
 
 def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
@@ -283,27 +285,26 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             previous_revision = print_revision_line(current_revision, previous_revision, hints, True, True)
             # print line from final blame with color adjusted
             print line[0:6] + blame_line + line[-3:]
-        elif line[0] == '-':
+        elif line[0] == '-' or line.startswith(COLOR_LINE_REMOVED_MARKER):
+            use_color = line[0] != '-'
             # it's a line that was deleted so have to pull it from original_blame
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
             real_deletion_revision = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
             if real_deletion_revision is not None:
-                print_revision_line(real_deletion_revision, previous_revision, hints, False, False)
+                print_revision_line(real_deletion_revision, previous_revision, hints, False, use_color)
                 # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(revisions_info_cache, real_deletion_revision)
-                print blame_line[blame_line.find(' '):]
+                print_deleted_revision_info(revisions_info_cache, real_deletion_revision, use_color)
+                sys.stdout.write(blame_line[blame_line.find(' '):])
+                if use_color:
+                    sys.stdout.write(COLOR_RESET)
                 previous_revision = real_deletion_revision
+                print ""
             else:
                 # let's print original line for the time being
                 print '-' + blame_line
                 # reset previous revision
                 previous_revision=None
-        elif line.startswith(COLOR_LINE_REMOVED_MARKER):
-            # print line from final blame with color adjusted
-            print line[0:6] + original_file_blame.pop(0) + line[-3:]
-            # reset previous revision
-            previous_revision=None
         elif line[0]=='\\':
             # print original line, nothing is added
             print line
