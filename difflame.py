@@ -21,6 +21,14 @@ COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
 COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
 COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
+# general OPTIONS for difflame
+# HINTS: use hints (1-line summary of a revision)
+# COLOR: use color on output
+OPTIONS=dict()
+OPTIONS['HINTS']=False # no hints
+OPTIONS['COLOR']=False
+
+
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
@@ -169,7 +177,7 @@ def get_revision_from_modified_line(line):
         starting_index = len(COLOR_RED)
     return line[starting_index:line.index(' ')]
 
-def print_revision_line(current_revision, previous_revision, hints, adding_line, use_color):
+def print_revision_line(current_revision, previous_revision, hints, adding_line):
     """
     Print hint line if hints are enabled
     
@@ -199,10 +207,10 @@ def print_revision_line(current_revision, previous_revision, hints, adding_line,
     else:
         hint=hints[current_revision]
     sys.stdout.write("\t")
-    if use_color:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_WHITE)
     sys.stdout.write(hint)
-    if use_color:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RESET)
     print ""
     
@@ -260,7 +268,7 @@ def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, t
     # when many merges are involved, it will take more analysis to figure out
     return (False, full_revision, original_revision)
 
-def print_deleted_revision_info(revisions_info_cache, revision_id, use_color, original_revision = None):
+def print_deleted_revision_info(revisions_info_cache, revision_id, original_revision = None):
     """
     Print revision information for a deleled line
     
@@ -273,7 +281,7 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, use_color, or
     else:
         info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
         revisions_info_cache[revision_id] = info
-    if use_color:
+    if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
     if original_revision is not None:
         sys.stdout.write("-" + original_revision + info[info.index(' '):])
@@ -296,36 +304,34 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             # reset previous revision
             previous_revision=None
             print line[0] + blame_line
-        elif line[0] == '+' or line.startswith(COLOR_LINE_ADDED_MARKER):
-            use_color = line[0] != '+'
+        elif line[0] == '+':
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print hint before the revision
             current_revision = process_added_line(blame_line, revisions_cache)
-            previous_revision = print_revision_line(current_revision, previous_revision, hints, True, use_color)
+            previous_revision = print_revision_line(current_revision, previous_revision, hints, True)
             # print line from final blame with color adjusted
-            if use_color:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_LINE_ADDED_MARKER)
             sys.stdout.write(blame_line)
-            if use_color:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
             print ""
-        elif line[0] == '-' or line.startswith(COLOR_LINE_REMOVED_MARKER):
-            use_color = line[0] != '-'
+        elif line[0] == '-':
             # it's a line that was deleted so have to pull it from original_blame
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
             (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
             # print hint if needed
-            print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
+            print_revision_line(deletion_revision, previous_revision, hints, False)
             if found_real_revision:
                 # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color)
+                print_deleted_revision_info(revisions_info_cache, deletion_revision)
             else:
                 # didn't find the revision where the line was deleted... let's show it with the original revision
-                print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color, original_revision)
+                print_deleted_revision_info(revisions_info_cache, deletion_revision, original_revision)
             # line number and content
             sys.stdout.write(blame_line[blame_line.find(' '):])
-            if use_color:
+            if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
             previous_revision = deletion_revision
             print ""
@@ -393,13 +399,13 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     return i
 
-def process_diff_output(options, blame_params, output, treeish1, treeish2):
+def process_diff_output(blame_params, output, treeish1, treeish2):
     """
     process diff output
     """
     # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
     hints=None
-    if options['HINTS']:
+    if OPTIONS['HINTS']:
         hints=dict()
     
     # process files until output is finished
@@ -420,11 +426,6 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
             # got to the end of the diff output
             break
         i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
-
-# general options for difflame
-# HINTS: use hints (1-line summary of a revision)
-options=dict()
-options['HINTS']=False # no hints
 
 # parameters
 diff_params=[]
@@ -451,19 +452,17 @@ for param in sys.argv[1:]:
             else:
                 if param in ["--color", "--no-color"]:
                     # set up color output forcibly
-                    diff_params.append(param)
+                    OPTIONS['COLOR'] = (param == "--color")
                     color_set=True
                 # is it a diff param or a blame param?
                 elif param.startswith("--diff-param=") or param.startswith("-dp="):
                     # diff param
                     diff_param=param[param.index('=') + 1:]
                     diff_params.append(diff_param)
-                    if diff_param in ["--color", "--no-color"]: # another way to set color
-                        color_set=True
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
-                    options['HINTS']=True
+                    OPTIONS['HINTS']=True
                 elif param == "--git-debug":
                     DEBUG_GIT = True
                 else:
@@ -494,7 +493,7 @@ for param in sys.argv[1:]:
 if not color_set:
     # if the user is using a terminal, will use color output
     if sys.stdout.isatty():
-        diff_params.append("--color")
+        OPTIONS['COLOR'] = True
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
@@ -508,6 +507,7 @@ if treeish1 is None:
 diff_output = None
 try:
     git_diff_params=["diff"]
+    git_diff_params.append('--no-color')
     git_diff_params.extend(diff_params)
     git_diff_params.append(treeish1 + ".." + treeish2)
     if len(paths) > 0:
@@ -523,7 +523,7 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(options, blame_params, diff_output, treeish1, treeish2)
+process_diff_output(blame_params, diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
