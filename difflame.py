@@ -311,7 +311,12 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
                 print ""
             else:
                 # let's print original line for the time being
-                print '-' + blame_line
+                if use_color:
+                    sys.stdout.write(COLOR_RED)
+                sys.stdout.write('-' + blame_line)
+                if use_color:
+                    sys.stdout.write(COLOR_RESET)
+                print ""
                 # reset previous revision
                 previous_revision=None
         elif line[0]=='\\':
