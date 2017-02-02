@@ -78,9 +78,8 @@ Multiple parameters are possible, each one having a separate --blame-param/-bp:
 
 options:
     --color/--no-color: output with/without color
-        if user doesn't specify --color/--no-color options (directly or through
-        --diff-param) then output will use color if process is connected to a
-        terminal
+        if user doesn't specify --color/--no-color options then output will use
+        color if process is connected to a terminal
         
     -w: skip space changes (both in diff and blame)
     
