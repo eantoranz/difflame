@@ -272,26 +272,28 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
     print hunk_content[0] # hunk descrtiptor line
     previous_revision=None
     for line in hunk_content[1:]:
-        if line[0] in [' ', '+']:
+        if line[0] in [' ', ]:
             # added line (no color) or unchanged line
             # print line from final blame
             blame_line = final_file_blame.pop(0)
-            if line[0] == '+':
-                current_revision = process_added_line(blame_line, revisions_cache)
-                previous_revision = print_revision_line(current_revision, previous_revision, hints, True, False)
-            else:
-                # move on the original_blame cause we got blame info from final_file_blame
-                original_file_blame.pop(0)
-                # reset previous revision
-                previous_revision=None
+            # move on the original_blame cause we got blame info from final_file_blame
+            original_file_blame.pop(0)
+            # reset previous revision
+            previous_revision=None
             print line[0] + blame_line
-        elif line.startswith(COLOR_LINE_ADDED_MARKER):
+        elif line[0] == '+' or line.startswith(COLOR_LINE_ADDED_MARKER):
+            use_color = line[0] != '+'
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print hint before the revision
             current_revision = process_added_line(blame_line, revisions_cache)
-            previous_revision = print_revision_line(current_revision, previous_revision, hints, True, True)
+            previous_revision = print_revision_line(current_revision, previous_revision, hints, True, use_color)
             # print line from final blame with color adjusted
-            print line[0:6] + blame_line + line[-3:]
+            if use_color:
+                sys.stdout.write(COLOR_LINE_ADDED_MARKER)
+            sys.stdout.write(blame_line)
+            if use_color:
+                sys.stdout.write(COLOR_RESET)
+            print ""
         elif line[0] == '-' or line.startswith(COLOR_LINE_REMOVED_MARKER):
             use_color = line[0] != '-'
             # it's a line that was deleted so have to pull it from original_blame
