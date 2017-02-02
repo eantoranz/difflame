@@ -21,6 +21,12 @@ COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
 COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
 COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
+# general options for difflame
+# HINTS: use hints (1-line summary of a revision)
+options=dict()
+options['HINTS']=False # no hints
+
+
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
@@ -393,7 +399,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     return i
 
-def process_diff_output(options, blame_params, output, treeish1, treeish2):
+def process_diff_output(blame_params, output, treeish1, treeish2):
     """
     process diff output
     """
@@ -420,11 +426,6 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
             # got to the end of the diff output
             break
         i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
-
-# general options for difflame
-# HINTS: use hints (1-line summary of a revision)
-options=dict()
-options['HINTS']=False # no hints
 
 # parameters
 diff_params=[]
@@ -523,7 +524,7 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(options, blame_params, diff_output, treeish1, treeish2)
+process_diff_output(blame_params, diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
