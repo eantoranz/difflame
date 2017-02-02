@@ -244,7 +244,19 @@ def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, t
         return revisions_pointing_to[0]
     return None # when many merges are involved, it will take more analysis to figure out
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache):
+def print_deleted_revision_info(revisions_info_cache, revision_id):
+    """
+    Print revision information for a deleled line
+    """
+    info = None
+    if revision_id in revisions_info_cache:
+        info = revisions_info_cache[revision_id]
+    else:
+        info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
+        revisions_info_cache[revision_id] = info
+    sys.stdout.write(info)
+
+def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
     """
     Print hunk on difflame output
     """
@@ -276,10 +288,10 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
             real_deletion_revision = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
-            previous_revision = print_revision_line(real_deletion_revision, previous_revision, hints, False, False)
             if real_deletion_revision is not None:
+                print_revision_line(real_deletion_revision, previous_revision, hints, False, False)
                 # got the revision where the line was deleted... let's show it
-                sys.stdout.write(run_git_command(["show", "--pretty=-%h (%an %ai", real_deletion_revision]).split("\n")[0][:-1])
+                print_deleted_revision_info(revisions_info_cache, real_deletion_revision)
                 print blame_line[blame_line.find(' '):]
                 previous_revision = real_deletion_revision
             else:
@@ -300,7 +312,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, hints, revisions_cache, child_revisions_cache):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -351,7 +363,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache)
+        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
     
     
     return i
@@ -368,14 +380,21 @@ def process_diff_output(options, blame_params, output, treeish1, treeish2):
     # process files until output is finished
     lines=output.split("\n")
     i=0
+    
+    # dictionary where any shortened id will be mapped to its full revision ID
     revisions_cache = dict()
+    
+    # the child nodes of all revivions (used when analysing deleted lines)
     child_revisions_cache = dict()
+    
+    # information about each revision (used for deleted lines so that we don't have to call git show all the time)
+    revisions_info_cache = dict()
     while i < len(lines):
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints, revisions_cache, child_revisions_cache)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
 
 # general options for difflame
 # HINTS: use hints (1-line summary of a revision)
