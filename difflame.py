@@ -237,23 +237,35 @@ def process_added_line(added_line, revisions_cache):
 def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, treeish2):
     """
     Given a line that was deleted, let's find out the revision where it was actually deleted and not its parent (full ID)
+    
+    Will return a tuple:
+        -   deletion revision was found
+        -   full id of the revision
+            If the revision was found, will return full id of the "real" deletion revision
+            Will return the reported revision from blame line (in other words, the original revision)
+        - original revision as it is on blame line
     """
     # get rid of prefix
     revision = get_revision_from_modified_line(deleted_line)
+    original_revision = revision
     if revision.startswith('^'):
         revision = revision[1:]
     # let's find the real revision (among the revisions that point to it) where the line was deleted 'for real')
-    revision=git_full_revision_id(revisions_cache, revision)
+    full_revision=git_full_revision_id(revisions_cache, revision)
     # let's find all revisions that are connected to this revisions starting from treeish2
-    revisions_pointing_to=revisions_pointing(child_revisions_cache, revision, treeish2)
+    revisions_pointing_to=revisions_pointing(child_revisions_cache, full_revision, treeish2)
     # if there's a single revision, BINGO!
     if len(revisions_pointing_to) == 1:
-        return revisions_pointing_to[0]
-    return None # when many merges are involved, it will take more analysis to figure out
+        return (True, revisions_pointing_to[0], original_revision)
+    # when many merges are involved, it will take more analysis to figure out
+    return (False, full_revision, original_revision)
 
-def print_deleted_revision_info(revisions_info_cache, revision_id, use_color):
+def print_deleted_revision_info(revisions_info_cache, revision_id, use_color, original_revision = None):
     """
     Print revision information for a deleled line
+    
+    if original_information is provided, that revision will be used on the output for the user to see
+        (for example, the real revision of a deletion was not found so using original revision reported)
     """
     info = None
     if revision_id in revisions_info_cache:
@@ -263,7 +275,10 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, use_color):
         revisions_info_cache[revision_id] = info
     if use_color:
         sys.stdout.write(COLOR_RED)
-    sys.stdout.write(info)
+    if original_revision is not None:
+        sys.stdout.write("-" + original_revision + info[info.index(' '):])
+    else:
+        sys.stdout.write(info)
 
 def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
     """
@@ -299,26 +314,26 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             # it's a line that was deleted so have to pull it from original_blame
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
-            real_deletion_revision = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
-            if real_deletion_revision is not None:
-                print_revision_line(real_deletion_revision, previous_revision, hints, False, use_color)
+            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
+            if found_real_revision:
+                print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
                 # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(revisions_info_cache, real_deletion_revision, use_color)
+                print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color)
                 sys.stdout.write(blame_line[blame_line.find(' '):])
                 if use_color:
                     sys.stdout.write(COLOR_RESET)
-                previous_revision = real_deletion_revision
+                previous_revision = deletion_revision
                 print ""
             else:
                 # let's print original line for the time being
-                if use_color:
-                    sys.stdout.write(COLOR_RED)
-                sys.stdout.write('-' + blame_line)
+                print_revision_line(deletion_revision, previous_revision, hints, False, use_color)
+                # got the revision where the line was deleted... let's show it
+                print_deleted_revision_info(revisions_info_cache, deletion_revision, use_color, original_revision)
+                sys.stdout.write(blame_line[blame_line.find(' '):])
                 if use_color:
                     sys.stdout.write(COLOR_RESET)
+                previous_revision = deletion_revision
                 print ""
-                # reset previous revision
-                previous_revision=None
         elif line[0]=='\\':
             # print original line, nothing is added
             print line
