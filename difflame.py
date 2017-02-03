@@ -39,6 +39,9 @@ REVISIONS_CACHE=dict()
 # direct child nodes of each revision
 CHILD_REVISIONS_CACHE=dict()
 
+# information displayed for each revision on modified lines
+REVISIONS_INFO_CACHE=dict()
+
 def cleanup_filename(filename):
     """
     Remove color markers on a filename if present
@@ -272,7 +275,7 @@ def process_deleted_line(deleted_line, treeish2):
     # when many merges are involved, it will take more analysis to figure out
     return (False, full_revision, original_revision)
 
-def print_deleted_revision_info(revisions_info_cache, revision_id, original_revision = None):
+def print_deleted_revision_info(revision_id, original_revision = None):
     """
     Print revision information for a deleled line
     
@@ -280,11 +283,11 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, original_revi
         (for example, the real revision of a deletion was not found so using original revision reported)
     """
     info = None
-    if revision_id in revisions_info_cache:
-        info = revisions_info_cache[revision_id]
+    if revision_id in REVISIONS_INFO_CACHE:
+        info = REVISIONS_INFO_CACHE[revision_id]
     else:
         info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
-        revisions_info_cache[revision_id] = info
+        REVISIONS_INFO_CACHE[revision_id] = info
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
     if original_revision is not None:
@@ -292,7 +295,7 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, original_revi
     else:
         sys.stdout.write(info)
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_info_cache):
+def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
     """
     Print hunk on difflame output
     """
@@ -329,10 +332,10 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, re
             print_revision_line(deletion_revision, previous_revision, False)
             if found_real_revision:
                 # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(revisions_info_cache, deletion_revision)
+                print_deleted_revision_info(deletion_revision)
             else:
                 # didn't find the revision where the line was deleted... let's show it with the original revision
-                print_deleted_revision_info(revisions_info_cache, deletion_revision, original_revision)
+                print_deleted_revision_info(deletion_revision, original_revision)
             # line number and content
             sys.stdout.write(blame_line[blame_line.find(' '):])
             if OPTIONS['COLOR']:
@@ -347,7 +350,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, re
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, revisions_info_cache):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -398,7 +401,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_info_cache)
+        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
     
     
     return i
@@ -416,14 +419,12 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
     lines=output.split("\n")
     i=0
     
-    # information about each revision (used for deleted lines so that we don't have to call git show all the time)
-    revisions_info_cache = dict()
     while i < len(lines):
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, revisions_info_cache)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2)
 
 # parameters
 diff_params=[]
