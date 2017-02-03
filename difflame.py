@@ -243,7 +243,7 @@ def process_deleted_line(deleted_line, treeish2):
         -   deletion revision was found
         -   full id of the revision
             If the revision was found, will return full id of the "real" deletion revision
-            Will return the reported revision from blame line (in other words, the original revision)
+            Otherwise, will return the reported revision from blame line (in other words, the original revision)
         - original revision as it is on blame line
     """
     # get rid of prefix
