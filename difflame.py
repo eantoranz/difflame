@@ -27,6 +27,12 @@ OPTIONS['COLOR']=False
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
+
+# caches
+
+# association between revisions and their hints
+HINTS=None
+
 def cleanup_filename(filename):
     """
     Remove color markers on a filename if present
@@ -168,20 +174,20 @@ def get_revision_from_modified_line(line):
     starting_index = 0
     return line[starting_index:line.index(' ')]
 
-def print_revision_line(current_revision, previous_revision, hints, adding_line):
+def print_revision_line(current_revision, previous_revision, adding_line):
     """
     Print hint line if hints are enabled
     
     if hints are disabled, nothing will be done
     
-    Will check hints dictionary for revision.
+    Will check HINTS dictionary for revision.
     If it's not there, will ask git for it and add it to the hints dictionary.
     
     have to return full revision ID
     
     """
     # have to process revision to see it we need to print hint before the revision
-    if hints is None:
+    if HINTS is None:
         # not using hints, nothing to do
         return
     
@@ -191,12 +197,12 @@ def print_revision_line(current_revision, previous_revision, hints, adding_line)
     
     # have to print hint
     hint=None
-    if not current_revision in hints:
+    if not current_revision in HINTS:
         # have to get hint from git and add it to hints
         hint=git_revision_hint(current_revision)
-        hints[current_revision]=hint
+        HINTS[current_revision]=hint
     else:
-        hint=hints[current_revision]
+        hint=HINTS[current_revision]
     sys.stdout.write("\t")
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_WHITE)
@@ -279,7 +285,7 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, original_revi
     else:
         sys.stdout.write(info)
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
+def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_cache, child_revisions_cache, revisions_info_cache):
     """
     Print hunk on difflame output
     """
@@ -299,7 +305,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print hint before the revision
             current_revision = process_added_line(blame_line, revisions_cache)
-            previous_revision = print_revision_line(current_revision, previous_revision, hints, True)
+            previous_revision = print_revision_line(current_revision, previous_revision, True)
             # print line from final blame with color adjusted
             if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_LINE_ADDED_MARKER)
@@ -313,7 +319,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
             # what is the _real_ revision where the lines were deleted?
             (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
             # print hint if needed
-            print_revision_line(deletion_revision, previous_revision, hints, False)
+            print_revision_line(deletion_revision, previous_revision, False)
             if found_real_revision:
                 # got the revision where the line was deleted... let's show it
                 print_deleted_revision_info(revisions_info_cache, deletion_revision)
@@ -334,7 +340,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hi
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, revisions_cache, child_revisions_cache, revisions_info_cache):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -385,19 +391,19 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
+        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_cache, child_revisions_cache, revisions_info_cache)
     
     
     return i
 
 def process_diff_output(blame_params, output, treeish1, treeish2):
+    global HINTS
     """
     process diff output
     """
     # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
-    hints=None
     if OPTIONS['HINTS']:
-        hints=dict()
+        HINTS=dict()
     
     # process files until output is finished
     lines=output.split("\n")
@@ -416,7 +422,7 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints, revisions_cache, child_revisions_cache, revisions_info_cache)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, revisions_cache, child_revisions_cache, revisions_info_cache)
 
 # parameters
 diff_params=[]
