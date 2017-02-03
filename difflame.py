@@ -216,10 +216,10 @@ def revisions_pointing(target_revision, starting_from):
     if target_revision in CHILD_REVISIONS_CACHE:
         # we already had detected the child nodes of this revision
         return CHILD_REVISIONS_CACHE[target_revision]
-    git_output=run_git_command(["log", "--pretty=%H%n%P", target_revision + ".." + starting_from]).split("\n")
+    git_output=run_git_command(["log", "--pretty=%H%n%P", target_revision + ".." + starting_from]).split("\n")[:-1]
     i=0
     children=[]
-    while i+1 < len(git_output):
+    while i < len(git_output):
         if git_output[i+1].find(target_revision) != -1:
             children.append(git_output[i])
         i+=2
