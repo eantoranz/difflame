@@ -30,8 +30,11 @@ TOTAL_GIT_EXECUTIONS = 0
 
 # caches
 
-# association between revisions and their hints
+# association between revisions and their hints (will be initialized if using hints)
 HINTS=None
+
+# association between shortened revision IDs and their real full IDs
+REVISIONS_CACHE=dict()
 
 def cleanup_filename(filename):
     """
@@ -65,17 +68,18 @@ def git_revision_hint(revision):
     """
     return run_git_command(["show", "--oneline", "--no-color", "--summary", revision]).split("\n")[0]
 
-def git_full_revision_id(revisions_cache, revision):
+def get_full_revision_id(revision):
     """
     Get the full ID of a given ID
     
     First will check in cache to see if the ID had been mapped
     """
-    if revision in revisions_cache:
+    if revision in REVISIONS_CACHE:
         # we already had the revision
-        return revisions_cache[revision]
+        return REVISIONS_CACHE[revision]
+    # fallback to get it from git
     full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
-    revisions_cache[revision] = full_revision
+    REVISIONS_CACHE[revision] = full_revision
     return full_revision
 
 def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
@@ -230,16 +234,16 @@ def revisions_pointing(child_revisions_cache, target_revision, starting_from):
     child_revisions_cache[target_revision] = children
     return children
 
-def process_added_line(added_line, revisions_cache):
+def process_added_line(added_line):
     """
     Given a line that was aded, let's find out the revision ID
     """
     # get rid of prefix
     revision = get_revision_from_modified_line(added_line)
     # let's find the real revision ID
-    return git_full_revision_id(revisions_cache, revision)
+    return get_full_revision_id(revision)
     
-def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, treeish2):
+def process_deleted_line(deleted_line, child_revisions_cache, treeish2):
     """
     Given a line that was deleted, let's find out the revision where it was actually deleted and not its parent (full ID)
     
@@ -256,7 +260,7 @@ def process_deleted_line(deleted_line, revisions_cache, child_revisions_cache, t
     if revision.startswith('^'):
         revision = revision[1:]
     # let's find the real revision (among the revisions that point to it) where the line was deleted 'for real')
-    full_revision=git_full_revision_id(revisions_cache, revision)
+    full_revision=get_full_revision_id(revision)
     # let's find all revisions that are connected to this revisions starting from treeish2
     revisions_pointing_to=revisions_pointing(child_revisions_cache, full_revision, treeish2)
     # if there's a single revision, BINGO!
@@ -285,7 +289,7 @@ def print_deleted_revision_info(revisions_info_cache, revision_id, original_revi
     else:
         sys.stdout.write(info)
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_cache, child_revisions_cache, revisions_info_cache):
+def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, child_revisions_cache, revisions_info_cache):
     """
     Print hunk on difflame output
     """
@@ -304,7 +308,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, re
         elif line[0] == '+':
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print hint before the revision
-            current_revision = process_added_line(blame_line, revisions_cache)
+            current_revision = process_added_line(blame_line)
             previous_revision = print_revision_line(current_revision, previous_revision, True)
             # print line from final blame with color adjusted
             if OPTIONS['COLOR']:
@@ -317,7 +321,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, re
             # it's a line that was deleted so have to pull it from original_blame
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
-            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, revisions_cache, child_revisions_cache, treeish2)
+            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, child_revisions_cache, treeish2)
             # print hint if needed
             print_revision_line(deletion_revision, previous_revision, False)
             if found_real_revision:
@@ -340,7 +344,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, re
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, revisions_cache, child_revisions_cache, revisions_info_cache):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, child_revisions_cache, revisions_info_cache):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -391,7 +395,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, revisions_cache, child_revisions_cache, revisions_info_cache)
+        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame, child_revisions_cache, revisions_info_cache)
     
     
     return i
@@ -409,9 +413,6 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
     lines=output.split("\n")
     i=0
     
-    # dictionary where any shortened id will be mapped to its full revision ID
-    revisions_cache = dict()
-    
     # the child nodes of all revivions (used when analysing deleted lines)
     child_revisions_cache = dict()
     
@@ -422,7 +423,7 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, revisions_cache, child_revisions_cache, revisions_info_cache)
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, child_revisions_cache, revisions_info_cache)
 
 # parameters
 diff_params=[]
