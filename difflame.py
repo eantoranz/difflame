@@ -42,20 +42,6 @@ CHILD_REVISIONS_CACHE=dict()
 # information displayed for each revision on modified lines
 REVISIONS_INFO_CACHE=dict()
 
-def cleanup_filename(filename):
-    """
-    Remove color markers on a filename if present
-    """
-    index = filename.find(chr(0x1b))
-    if index == -1:
-        return filename # it's clean
-    if index == 0:
-        # it' white, right? Let's remove it
-        filename=filename[4:]
-    else:
-        filename=filename[:index]
-    return filename
-
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
     """
@@ -360,8 +346,8 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     diff_line = output_lines[i].split()
     if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
-    original_name = cleanup_filename(diff_line[2])
-    final_name = cleanup_filename(diff_line[3])
+    original_name = diff_line[2]
+    final_name = diff_line[3]
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
