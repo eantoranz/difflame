@@ -14,12 +14,7 @@ COLOR_WHITE=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d)
 COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 
 # color diff markers
-COLOR_DIFF_LINE_MARKER=COLOR_WHITE + "diff"
-COLOR_TRIPLE_DASH_MARKER=COLOR_WHITE + "---"
-COLOR_TRIPLE_PLUS_MARKER=COLOR_WHITE + "+++"
 COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
-COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
-COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
 
 # general OPTIONS for difflame
 # HINTS: use hints (1-line summary of a revision)
@@ -146,7 +141,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
         # reached EOF, probably
         return ("", ["0", "0"]) # return something with the expected structure, just in case
     
-    if hunk_description_line[0] != '@' and not hunk_description_line.startswith(COLOR_HUNK_DESCRIPTOR_MARKER):
+    if hunk_description_line[0] != '@':
         # not the begining of a hunk
         raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + "): " + hunk_description_line[0])
     
@@ -158,7 +153,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     final_file_hunk_pos = hunk_description_info[2]
 
     i+=1
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-', '\\'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] in [' ', '+', '-', '\\']:
         # a valid line in the hunk
         hunk_content.append(output_lines[i])
         i+=1
@@ -171,10 +166,6 @@ def get_revision_from_modified_line(line):
     Return the revision id from an added or removed line
     """
     starting_index = 0
-    if line.find(COLOR_GREEN) == 0:
-        starting_index = len(COLOR_GREEN)
-    elif line.find(COLOR_RED) == 0:
-        starting_index = len(COLOR_RED)
     return line[starting_index:line.index(' ')]
 
 def print_revision_line(current_revision, previous_revision, hints, adding_line):
@@ -351,15 +342,15 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     # First is a 'diff' line
     i=starting_line
     diff_line = output_lines[i].split()
-    if diff_line[0] not in ["diff", COLOR_DIFF_LINE_MARKER]:
+    if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
     original_name = cleanup_filename(diff_line[2])
     final_name = cleanup_filename(diff_line[3])
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
-    while i < len(output_lines) and not output_lines[i].startswith("---") and not output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
-        if output_lines[i].startswith("diff") or output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
+    while i < len(output_lines) and not output_lines[i].startswith("---"):
+        if output_lines[i].startswith("diff"):
             # just finished a file without content changes
             return i
         print output_lines[i]; i+=1
@@ -371,7 +362,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     print output_lines[i]; i+=1 # line with ---
     
     # next should begin with +++
-    if not output_lines[i].startswith("+++") and not output_lines[i].startswith(COLOR_TRIPLE_PLUS_MARKER):
+    if not output_lines[i].startswith("+++"):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
     print output_lines[i]; i+=1 # line with +++
@@ -380,7 +371,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     hunks = []
     original_hunk_positions = []
     final_hunk_positions = []
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0]=='@':
         # found hunk mark (@)
         (hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
         hunks.append(hunk_content)
