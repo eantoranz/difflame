@@ -305,6 +305,8 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
             # print line from final blame with color adjusted
             if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_LINE_ADDED_MARKER)
+            else:
+                sys.stdout.write('+')
             sys.stdout.write(blame_line)
             if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
