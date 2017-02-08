@@ -11,31 +11,36 @@ import sys
 COLOR_GREEN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d)
 COLOR_RED=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d)
 COLOR_WHITE=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d)
+COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 
 # color diff markers
-COLOR_DIFF_LINE_MARKER=COLOR_WHITE + "diff"
-COLOR_TRIPLE_DASH_MARKER=COLOR_WHITE + "---"
-COLOR_TRIPLE_PLUS_MARKER=COLOR_WHITE + "+++"
 COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
-COLOR_LINE_REMOVED_MARKER=COLOR_RED + '-'
-COLOR_HUNK_DESCRIPTOR_MARKER=chr(0x1b) + chr(0x5b) + chr(0x33)+ chr(0x36) + chr(0x6d) + "@"
+
+# general OPTIONS for difflame
+# HINTS: use hints (1-line summary of a revision)
+# COLOR: use color on output
+OPTIONS=dict()
+OPTIONS['HINTS']=False # no hints
+OPTIONS['COLOR']=False
+
 
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
-def cleanup_filename(filename):
-    """
-    Remove color markers on a filename if present
-    """
-    index = filename.find(chr(0x1b))
-    if index == -1:
-        return filename # it's clean
-    if index == 0:
-        # it' white, right? Let's remove it
-        filename=filename[4:]
-    else:
-        filename=filename[:index]
-    return filename
+
+# caches
+
+# association between revisions and their hints (will be initialized if using hints)
+HINTS=None
+
+# association between shortened revision IDs and their real full IDs
+REVISIONS_CACHE=dict()
+
+# direct child nodes of each revision
+CHILD_REVISIONS_CACHE=dict()
+
+# information displayed for each revision on modified lines
+REVISIONS_INFO_CACHE=dict()
 
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
@@ -54,6 +59,20 @@ def git_revision_hint(revision):
     get revision hint from git (won't include ending \n)
     """
     return run_git_command(["show", "--oneline", "--no-color", "--summary", revision]).split("\n")[0]
+
+def get_full_revision_id(revision):
+    """
+    Get the full ID of a given ID
+    
+    First will check in cache to see if the ID had been mapped
+    """
+    if revision in REVISIONS_CACHE:
+        # we already had the revision
+        return REVISIONS_CACHE[revision]
+    # fallback to get it from git
+    full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
+    REVISIONS_CACHE[revision] = full_revision
+    return full_revision
 
 def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
     """
@@ -93,7 +112,7 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original
         git_blame_opts.append(treeish)
     else:
         # reverse blame
-        git_blame_opts.extend(["--reverse", original_treeish + ".." + treeish])
+        git_blame_opts.extend(["--reverse", "-s", original_treeish + ".." + treeish])
     
     if len(blame_opts) > 0:
         git_blame_opts.extend(blame_opts)
@@ -122,9 +141,9 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     hunk_description_line = output_lines[i]
     if len(hunk_description_line) == 0:
         # reached EOF, probably
-        return ("", ["0", "0"]) # return something with tht expected structure, just in case
+        return ("", ["0", "0"]) # return something with the expected structure, just in case
     
-    if hunk_description_line[0] != '@' and not hunk_description_line.startswith(COLOR_HUNK_DESCRIPTOR_MARKER):
+    if hunk_description_line[0] != '@':
         # not the begining of a hunk
         raise Exception("Not the begining of a hunk on line " + str(i + 1) + " (" + original_name + ", " + final_name + "): " + hunk_description_line[0])
     
@@ -136,7 +155,7 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     final_file_hunk_pos = hunk_description_info[2]
 
     i+=1
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0] in [' ', '+', '-', '\\'] or output_lines[i].startswith(COLOR_LINE_ADDED_MARKER) or output_lines[i].startswith(COLOR_LINE_REMOVED_MARKER)):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0] in [' ', '+', '-', '\\']:
         # a valid line in the hunk
         hunk_content.append(output_lines[i])
         i+=1
@@ -144,86 +163,173 @@ def process_hunk_from_diff_output(blame_params, output_lines, starting_line, ori
     # got to the end of the hunk
     return (hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
 
-def get_revision_from_added_line(line):
+def get_revision_from_modified_line(line):
     """
-    Return the revision id from an added line
+    Return the revision id from an added or removed line
     """
-    return line[:line.index(' ')]
+    starting_index = 0
+    return line[starting_index:line.index(' ')]
 
-def print_revision_line(blame_line, previous_revision, hints, use_color):
+def print_revision_line(current_revision, previous_revision, adding_line):
     """
     Print hint line if hints are enabled
     
     if hints are disabled, nothing will be done
     
-    Will check hints dictionary for revision.
+    Will check HINTS dictionary for revision.
     If it's not there, will ask git for it and add it to the hints dictionary.
     
-    will return current revision (None if hints are disabled)
+    have to return full revision ID
+    
     """
     # have to process revision to see it we need to print hint before the revision
-    if hints is None:
+    if HINTS is None:
         # not using hints, nothing to do
-        return None
+        return
     
-    # get revision
-    revision=get_revision_from_added_line(blame_line)
-    if previous_revision is not None and revision == previous_revision:
-        # same revision, nothing todo
-        return revision
+    if previous_revision is not None and current_revision == previous_revision:
+        # same revision, nothing to do
+        return current_revision
     
     # have to print hint
     hint=None
-    if not revision in hints:
+    if not current_revision in HINTS:
         # have to get hint from git and add it to hints
-        hint=git_revision_hint(revision)
-        hints[revision]=hint
+        hint=git_revision_hint(current_revision)
+        HINTS[current_revision]=hint
     else:
-        hint=hints[revision]
+        hint=HINTS[current_revision]
     sys.stdout.write("\t")
-    if (use_color):
-        sys.stdout.write(COLOR_GREEN)
-    sys.stdout.write(hint + "\n")
+    if OPTIONS['COLOR']:
+        sys.stdout.write(COLOR_WHITE)
+    sys.stdout.write(hint)
+    if OPTIONS['COLOR']:
+        sys.stdout.write(COLOR_RESET)
+    print ""
     
-    # return revision
-    return revision
-    
+    return current_revision
 
-def print_hunk(hunk_content, original_file_blame, final_file_blame, hints):
+def revisions_pointing(target_revision, starting_from):
+    """
+    Find revisions that point to target_revision starting to analyze from starting_from
+    """
+    if target_revision in CHILD_REVISIONS_CACHE:
+        # we already had detected the child nodes of this revision
+        return CHILD_REVISIONS_CACHE[target_revision]
+    git_output=run_git_command(["log", "--pretty=%H%n%P", target_revision + ".." + starting_from]).split("\n")[:-1]
+    i=0
+    children=[]
+    while i < len(git_output):
+        if git_output[i+1].find(target_revision) != -1:
+            children.append(git_output[i])
+        i+=2
+    CHILD_REVISIONS_CACHE[target_revision] = children
+    return children
+
+def process_added_line(added_line):
+    """
+    Given a line that was aded, let's find out the revision ID
+    """
+    # get rid of prefix
+    revision = get_revision_from_modified_line(added_line)
+    # let's find the real revision ID
+    return get_full_revision_id(revision)
+    
+def process_deleted_line(deleted_line, treeish2):
+    """
+    Given a line that was deleted, let's find out the revision where it was actually deleted and not its parent (full ID)
+    
+    Will return a tuple:
+        -   deletion revision was found
+        -   full id of the revision
+            If the revision was found, will return full id of the "real" deletion revision
+            Otherwise, will return the reported revision from blame line (in other words, the original revision)
+        - original revision as it is on blame line
+    """
+    # get rid of prefix
+    revision = get_revision_from_modified_line(deleted_line)
+    original_revision = revision
+    if revision.startswith('^'):
+        revision = revision[1:]
+    # let's find the real revision (among the revisions that point to it) where the line was deleted 'for real')
+    full_revision=get_full_revision_id(revision)
+    # let's find all revisions that are connected to this revisions starting from treeish2
+    revisions_pointing_to=revisions_pointing(full_revision, treeish2)
+    # if there's a single revision, BINGO!
+    if len(revisions_pointing_to) == 1:
+        return (True, revisions_pointing_to[0], original_revision)
+    # when many merges are involved, it will take more analysis to figure out
+    return (False, full_revision, original_revision)
+
+def print_deleted_revision_info(revision_id, original_revision = None):
+    """
+    Print revision information for a deleled line
+    
+    if original_information is provided, that revision will be used on the output for the user to see
+        (for example, the real revision of a deletion was not found so using original revision reported)
+    """
+    info = None
+    if revision_id in REVISIONS_INFO_CACHE:
+        info = REVISIONS_INFO_CACHE[revision_id]
+    else:
+        info = run_git_command(["show", "--pretty=%h (%an %ai", revision_id]).split("\n")[0]
+        REVISIONS_INFO_CACHE[revision_id] = info
+    if OPTIONS['COLOR']:
+        sys.stdout.write(COLOR_RED)
+    if original_revision is not None:
+        sys.stdout.write("%" + original_revision + info[info.index(' '):])
+    else:
+        sys.stdout.write('-' + info)
+
+def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
     """
     Print hunk on difflame output
     """
     print hunk_content[0] # hunk descrtiptor line
     previous_revision=None
     for line in hunk_content[1:]:
-        if line[0] in [' ', '+']:
+        if line[0] in [' ', ]:
             # added line (no color) or unchanged line
             # print line from final blame
             blame_line = final_file_blame.pop(0)
-            if line[0] == '+':
-                previous_revision = print_revision_line(blame_line, previous_revision, hints, False)
-            else:
-                # move on the original_blame cause we got blame info from final_file_blame
-                original_file_blame.pop(0)
-                # reset previous revision
-                previous_revision=None
+            # move on the original_blame cause we got blame info from final_file_blame
+            original_file_blame.pop(0)
+            # reset previous revision
+            previous_revision=None
             print line[0] + blame_line
-        elif line.startswith(COLOR_LINE_ADDED_MARKER):
+        elif line[0] == '+':
             blame_line = final_file_blame.pop(0)
             # have to process revision to see it we need to print hint before the revision
-            previous_revision = print_revision_line(blame_line, previous_revision, hints, True)
+            current_revision = process_added_line(blame_line)
+            previous_revision = print_revision_line(current_revision, previous_revision, True)
             # print line from final blame with color adjusted
-            print line[0:6] + blame_line + line[-3:]
+            if OPTIONS['COLOR']:
+                sys.stdout.write(COLOR_LINE_ADDED_MARKER)
+            else:
+                sys.stdout.write('+')
+            sys.stdout.write(blame_line)
+            if OPTIONS['COLOR']:
+                sys.stdout.write(COLOR_RESET)
+            print ""
         elif line[0] == '-':
-            # it's a line that was deleted so have to pull it from the original_blame
-            print line[0] + original_file_blame.pop(0)
-            # reset previous revision
-            previous_revision=None
-        elif line.startswith(COLOR_LINE_REMOVED_MARKER):
-            # print line from final blame with color adjusted
-            print line[0:6] + original_file_blame.pop(0) + line[-3:]
-            # reset previous revision
-            previous_revision=None
+            # it's a line that was deleted so have to pull it from original_blame
+            blame_line = original_file_blame.pop(0)
+            # what is the _real_ revision where the lines were deleted?
+            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
+            # print hint if needed
+            print_revision_line(deletion_revision, previous_revision, False)
+            if found_real_revision:
+                # got the revision where the line was deleted... let's show it
+                print_deleted_revision_info(deletion_revision)
+            else:
+                # didn't find the revision where the line was deleted... let's show it with the original revision
+                print_deleted_revision_info(deletion_revision, original_revision)
+            # line number and content
+            sys.stdout.write(blame_line[blame_line.find(' '):])
+            if OPTIONS['COLOR']:
+                sys.stdout.write(COLOR_RESET)
+            previous_revision = deletion_revision
+            print ""
         elif line[0]=='\\':
             # print original line, nothing is added
             print line
@@ -232,7 +338,7 @@ def print_hunk(hunk_content, original_file_blame, final_file_blame, hints):
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2, hints):
+def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -240,15 +346,15 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     # First is a 'diff' line
     i=starting_line
     diff_line = output_lines[i].split()
-    if diff_line[0] not in ["diff", COLOR_DIFF_LINE_MARKER]:
+    if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
-    original_name = cleanup_filename(diff_line[2])
-    final_name = cleanup_filename(diff_line[3])
+    original_name = diff_line[2]
+    final_name = diff_line[3]
     print output_lines[i]; i+=1
     
     # let's get to the line that starts with ---
-    while i < len(output_lines) and not output_lines[i].startswith("---") and not output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
-        if output_lines[i].startswith("diff") or output_lines[i].startswith(COLOR_TRIPLE_DASH_MARKER):
+    while i < len(output_lines) and not output_lines[i].startswith("---"):
+        if output_lines[i].startswith("diff"):
             # just finished a file without content changes
             return i
         print output_lines[i]; i+=1
@@ -260,7 +366,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     print output_lines[i]; i+=1 # line with ---
     
     # next should begin with +++
-    if not output_lines[i].startswith("+++") and not output_lines[i].startswith(COLOR_TRIPLE_PLUS_MARKER):
+    if not output_lines[i].startswith("+++"):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
     print output_lines[i]; i+=1 # line with +++
@@ -269,7 +375,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     hunks = []
     original_hunk_positions = []
     final_hunk_positions = []
-    while i < len(output_lines) and len(output_lines[i]) > 0 and (output_lines[i][0]=='@' or output_lines[i].startswith(COLOR_HUNK_DESCRIPTOR_MARKER)):
+    while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0]=='@':
         # found hunk mark (@)
         (hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
         hunks.append(hunk_content)
@@ -283,34 +389,30 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(hunk_content, original_file_blame, final_file_blame, hints)
+        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
     
     
     return i
 
-def process_diff_output(options, blame_params, output, treeish1, treeish2):
+def process_diff_output(blame_params, output, treeish1, treeish2):
+    global HINTS
     """
     process diff output
     """
     # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
-    hints=None
-    if options['HINTS']:
-        hints=dict()
+    if OPTIONS['HINTS']:
+        HINTS=dict()
     
     # process files until output is finished
     lines=output.split("\n")
     i=0
+    
     while i < len(lines):
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2, hints)
-
-# general options for difflame
-# HINTS: use hints (1-line summary of a revision)
-options=dict()
-options['HINTS']=False # no hints
+        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2)
 
 # parameters
 diff_params=[]
@@ -337,19 +439,17 @@ for param in sys.argv[1:]:
             else:
                 if param in ["--color", "--no-color"]:
                     # set up color output forcibly
-                    diff_params.append(param)
+                    OPTIONS['COLOR'] = (param == "--color")
                     color_set=True
                 # is it a diff param or a blame param?
                 elif param.startswith("--diff-param=") or param.startswith("-dp="):
                     # diff param
                     diff_param=param[param.index('=') + 1:]
                     diff_params.append(diff_param)
-                    if diff_param in ["--color", "--no-color"]: # another way to set color
-                        color_set=True
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     blame_params.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
-                    options['HINTS']=True
+                    OPTIONS['HINTS']=True
                 elif param == "--git-debug":
                     DEBUG_GIT = True
                 else:
@@ -380,7 +480,7 @@ for param in sys.argv[1:]:
 if not color_set:
     # if the user is using a terminal, will use color output
     if sys.stdout.isatty():
-        diff_params.append("--color")
+        OPTIONS['COLOR'] = True
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
@@ -394,6 +494,7 @@ if treeish1 is None:
 diff_output = None
 try:
     git_diff_params=["diff"]
+    git_diff_params.append('--no-color')
     git_diff_params.extend(diff_params)
     git_diff_params.append(treeish1 + ".." + treeish2)
     if len(paths) > 0:
@@ -409,7 +510,7 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(options, blame_params, diff_output, treeish1, treeish2)
+process_diff_output(blame_params, diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
