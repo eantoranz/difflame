@@ -272,14 +272,14 @@ def print_deleted_revision_info(revision_id, original_revision = None):
     if revision_id in REVISIONS_INFO_CACHE:
         info = REVISIONS_INFO_CACHE[revision_id]
     else:
-        info = run_git_command(["show", "--pretty=-%h (%an %ai", revision_id]).split("\n")[0][:-1]
+        info = run_git_command(["show", "--pretty=%h (%an %ai", revision_id]).split("\n")[0]
         REVISIONS_INFO_CACHE[revision_id] = info
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
     if original_revision is not None:
-        sys.stdout.write("-" + original_revision + info[info.index(' '):])
+        sys.stdout.write("%" + original_revision + info[info.index(' '):])
     else:
-        sys.stdout.write(info)
+        sys.stdout.write('-' + info)
 
 def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
     """
