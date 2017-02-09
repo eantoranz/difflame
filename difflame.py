@@ -123,7 +123,7 @@ def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=Non
     git_blame_opts.extend(["--", file_name])
     return run_git_command(git_blame_opts)
 
-def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
+def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name):
     """
     Process a diff hunk from a file
     A hunk starts with a line that starts with @ and describes the position of the block of code in original file and ending file
@@ -381,7 +381,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0]=='@':
         # found hunk mark (@)
-        (hunk_content, hunk_positions) = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
+        (hunk_content, hunk_positions) = process_hunk_from_diff_output(output_lines, i, original_name, final_name)
         hunks.append(hunk_content)
         original_hunk_positions.append(hunk_positions[0])
         final_hunk_positions.append(hunk_positions[1])
