@@ -272,7 +272,10 @@ def get_line_number_from_deleted_line(deleted_line):
     return int(deleted_line[i+1:parenthesis_index])
     
 
-def find_deleting_revision_from_merge(original_filename, deleted_line, merge_revision, parents):
+def find_deleting_parent_from_merge(original_filename, deleted_line, merge_revision, parents):
+    '''
+    Find the _parent_ from which a deleted line came from
+    '''
     original_filename = cleanup_filename(original_filename)
     # finding line number
     deleted_line_number = get_line_number_from_deleted_line(deleted_line)
@@ -299,7 +302,7 @@ def find_deleting_revision_from_merge(original_filename, deleted_line, merge_rev
                 '''
                 We are already past the position of the file where this line would have been reported
                 as deleted, this means that, when comparing with this parent, the deleted line was
-                'already deleted' on the parent.... so this is the probable deleting revision (TODO or some revision on this path)
+                'already deleted' on the parent.... so this is the probable parent
                 '''
                 return parent
             if deleted_line_number < hunk_ending_line:
@@ -367,7 +370,7 @@ def process_deleted_line(original_filename, deleted_line, treeish2):
         if the 'alleged' revision is a merge revision, the 'real' revision that removed that line
         might be on another parent branch of the parent revision
         '''
-        deleting_revision = find_deleting_revision_from_merge(original_filename, deleted_line, blamed_revision, parents)
+        deleting_revision = find_deleting_parent_from_merge(original_filename, deleted_line, blamed_revision, parents)
         if deleting_revision is None:
             return (False, blamed_revision, original_revision)
         else:
