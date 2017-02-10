@@ -20,7 +20,7 @@ COLOR_LINE_ADDED_MARKER=COLOR_GREEN + '+'
 # HINTS: use hints (1-line summary of a revision)
 # COLOR: use color on output
 OPTIONS=dict()
-OPTIONS['HINTS']=False # no hints
+OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
 
 # options used for diff and blame
@@ -451,7 +451,10 @@ for param in sys.argv[1:]:
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
                     BLAME_OPTIONS.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
-                    OPTIONS['HINTS']=True
+                    # Will support them but they are unnecessary
+                    continue
+                elif param == "--no-hints":
+                    OPTIONS['HINTS'] = False
                 elif param == "--git-debug":
                     DEBUG_GIT = True
                 else:

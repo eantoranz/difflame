@@ -8,7 +8,7 @@ Show the output of diff with the additional information of blame
 Example output (from difflame project itself, two revisions apart, using blame
 params to change default output from git blame):
 
-$ difflame.py -bp=-t --hints 3d426842 6e2bfb8f
+$ difflame.py -bp=-t 3d426842 6e2bfb8f
 diff --git a/difflame.py b/difflame.py
 index f6e879b..e3a2b65 100755
 --- a/difflame.py
@@ -65,11 +65,11 @@ options:
         
     -w: skip space changes (in both diff and blame)
     
-    --hints: when printing added lines, provide the hint (one-line summary of the revision)
+    --no-hints: when printing added lines, do not provide the hint (one-line summary of the revision)
         before the lines themselves.
         if a number of added lines belong to the same revision one after the other, a single
-        hint line will be printed before them.
-        It would look something like this (taken from git project):
+        hint line would be printed before them.
+        It would have looked something like this with hints enabled (taken from git project):
             diff --git a/fast-import.c b/fast-import.c
             index f561ba833..64fe602f0 100644
             --- a/fast-import.c
