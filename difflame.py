@@ -42,6 +42,8 @@ REVISIONS_CACHE=dict()
 
 # direct child nodes of each revision
 CHILD_REVISIONS_CACHE=dict()
+# direct parent nodes of each revision
+PARENT_REVISIONS_CACHE=dict()
 
 # information displayed for each revision on modified lines
 REVISIONS_INFO_CACHE=dict()
@@ -78,6 +80,14 @@ def get_full_revision_id(revision):
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
 
+def cleanup_filename(filename):
+    '''
+    Removing prepending a/ or b/ if present
+    '''
+    if len(filename) >= 2 and filename[0] in ['a', 'b'] and filename[1] == '/':
+        return filename[2:]
+    return filename
+
 def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=None):
     """
     Get blame for especified hunk positions
@@ -87,8 +97,7 @@ def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=Non
     If original_treeish is set up, it means it's a reverse blame to get deleted lines
     """
     # clean up file_name from prepending a/ or b/ (if present)
-    if file_name.startswith('a/') or file_name.startswith('b/'):
-        file_name = file_name[2:]
+    file_name = cleanup_filename(file_name)
     
     # starting to build git command arguments
     git_blame_opts=["blame", "--no-progress"]
@@ -132,7 +141,7 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
         - ' ': Line didn't change
         - '+': Line was added
         - '-': Line was deleted
-    Until we have a line that starts with a 'd' or a '@' (begining of new file or begining of new hunk)
+    Until we have a line that starts with a 'd' or a '@' (beginning of new file or begining of new hunk)
     
     Will return a tuple (hunk content [raw] from diff, hunk positions and sizes [original position, final position])
     """
@@ -223,12 +232,24 @@ def revisions_pointing(target_revision, starting_from):
     git_output=run_git_command(["log", "--pretty=%H%n%P", target_revision + ".." + starting_from]).split("\n")[:-1]
     i=0
     children=[]
+    # TODO performance: while crossing over this line of revisions, if the parents of a revision haven't been set up yet, we add them
     while i < len(git_output):
         if git_output[i+1].find(target_revision) != -1:
             children.append(git_output[i])
         i+=2
     CHILD_REVISIONS_CACHE[target_revision] = children
     return children
+
+def get_parent_revisions(revision):
+    """
+    Find the parent revisions of a given revision
+    """
+    if revision in PARENT_REVISIONS_CACHE:
+        return PARENT_REVISIONS_CACHE[revision]
+    # didn't have the parent revisions
+    parents=run_git_command(["log", "--pretty=%P", revision]).split("\n")[0].split(" ")
+    PARENT_REVISIONS_CACHE[revision] = parents
+    return parents
 
 def process_added_line(added_line):
     """
@@ -238,8 +259,85 @@ def process_added_line(added_line):
     revision = get_revision_from_modified_line(added_line)
     # let's find the real revision ID
     return get_full_revision_id(revision)
+
+def get_line_number_from_deleted_line(deleted_line):
+    '''
+    line number will always come right before a ')'
+    '''
+    parenthesis_index = deleted_line.index(')')
+    # now we go back until we find anything not in [0-9]
+    i = parenthesis_index-1
+    while deleted_line[i] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+        i-=1
+    return int(deleted_line[i+1:parenthesis_index])
     
-def process_deleted_line(deleted_line, treeish2):
+
+def find_deleting_revision_from_merge(original_filename, deleted_line, merge_revision, parents):
+    original_filename = cleanup_filename(original_filename)
+    # finding line number
+    deleted_line_number = get_line_number_from_deleted_line(deleted_line)
+    # will do a diff between the blamed revision and its parent and will try to see in which revision the line was deleted
+    best_revision = None # where we will hold the best revision so far
+    for parent in parents:
+        found_deleted_line = False
+        diff_output = run_git_command(["diff", "--no-color", parent + ".." + merge_revision, "--", original_filename]).split("\n")
+        # have to track chunks to make sure the line requested was actually deleted on one of the chunks of the output
+        starting_line = 0
+        # let's find the position of the line that starts with @
+        while starting_line < len(diff_output):
+            while starting_line < len(diff_output) and (len(diff_output[starting_line]) == 0 or diff_output[starting_line][0] != '@'):
+                starting_line+=1
+            # maybe we went overboard
+            if starting_line >= len(diff_output):
+                break
+            (hunk_content, hunk_positions) = process_hunk_from_diff_output(diff_output, starting_line, original_filename, "<merge-analysis>")
+            # does this hunk cover the deleted line
+            positions=hunk_positions[0].split(",")
+            hunk_starting_line=abs(int(positions[0]))
+            hunk_ending_line = hunk_starting_line + int(positions[1])
+            if deleted_line_number < hunk_starting_line:
+                '''
+                We are already past the position of the file where this line would have been reported
+                as deleted, this means that, when comparing with this parent, the deleted line was
+                'already deleted' on the parent.... so this is the probable deleting revision (TODO or some revision on this path)
+                '''
+                return parent
+            if deleted_line_number < hunk_ending_line:
+                '''
+                The line we are looking could be in this hunk
+                '''
+                original_file_line = hunk_starting_line # index of the line on the _original_ file
+                hunk_line = 0
+                while hunk_line < len(hunk_content) and original_file_line <= deleted_line_number:
+                    line = hunk_content[hunk_line]
+                    # will only count lines that weren't modified or that were removed
+                    if line[0] in ['-', ' ']:
+                        if line[0] == '-':
+                            # does it match the line we are looking for?
+                            if original_file_line == deleted_line_number:
+                                '''
+                                line is matched.... this parent _has_ the deleted line so
+                                it's not from this parent that the deletion came from
+                                '''
+                                found_deleted_line = True
+                                break # force the while to stop
+                        original_file_line+=1
+                    hunk_line+=1
+                    if original_file_line > deleted_line_number:
+                        '''
+                        couldn't fint the line which means that it's not 'deleted' when comparing with this hunk
+                        '''
+                        return parent
+            starting_line += len(hunk_content)
+        '''
+        Already checked all hunks on this parent or the hunk had the deleted line
+        '''
+        if not found_deleted_line:
+            return parent
+    # If we reached this point, we couldn't find a revision where it was deleted
+    return None
+    
+def process_deleted_line(original_filename, deleted_line, treeish2):
     """
     Given a line that was deleted, let's find out the revision where it was actually deleted and not its parent (full ID)
     
@@ -259,10 +357,22 @@ def process_deleted_line(deleted_line, treeish2):
     full_revision=get_full_revision_id(revision)
     # let's find all revisions that are connected to this revisions starting from treeish2
     revisions_pointing_to=revisions_pointing(full_revision, treeish2)
-    # if there's a single revision, BINGO!
     if len(revisions_pointing_to) == 1:
-        return (True, revisions_pointing_to[0], original_revision)
-    # when many merges are involved, it will take more analysis to figure out
+        blamed_revision = revisions_pointing_to[0]
+        parents = get_parent_revisions(blamed_revision)
+        if len(parents) == 1:
+            # doesn't look like a merge, found the culprit
+            return (True, blamed_revision, original_revision)
+        '''
+        if the 'alleged' revision is a merge revision, the 'real' revision that removed that line
+        might be on another parent branch of the parent revision
+        '''
+        deleting_revision = find_deleting_revision_from_merge(original_filename, deleted_line, blamed_revision, parents)
+        if deleting_revision is None:
+            return (False, blamed_revision, original_revision)
+        else:
+            return (True, deleting_revision, original_revision)
+    # when many merges are involved, it will take more analysis to figure out... right?
     return (False, full_revision, original_revision)
 
 def print_deleted_revision_info(revision_id, original_revision = None):
@@ -285,7 +395,7 @@ def print_deleted_revision_info(revision_id, original_revision = None):
     else:
         sys.stdout.write('-' + info)
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
+def print_hunk(treeish2, original_filename, final_filename, hunk_content, original_file_blame, final_file_blame):
     """
     Print hunk on difflame output
     """
@@ -319,7 +429,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
             # it's a line that was deleted so have to pull it from original_blame
             blame_line = original_file_blame.pop(0)
             # what is the _real_ revision where the lines were deleted?
-            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
+            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(original_filename, blame_line, treeish2)
             # print hint if needed
             print_revision_line(deletion_revision, previous_revision, False)
             if found_real_revision:
@@ -393,7 +503,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     
     # print hunks
     for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
+        print_hunk(treeish2, original_name, final_name, hunk_content, original_file_blame, final_file_blame)
     
     
     return i
