@@ -101,6 +101,8 @@ def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=Non
     
     # starting to build git command arguments
     git_blame_opts=["blame", "--no-progress"]
+    if len(BLAME_OPTIONS) > 0:
+        git_blame_opts.extend(BLAME_OPTIONS)
     
     for hunk_position in hunk_positions:
         hunk_position = hunk_position.split(',')
@@ -127,8 +129,6 @@ def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=Non
         # reverse blame
         git_blame_opts.extend(["--reverse", "-s", original_treeish + ".." + treeish])
     
-    if len(BLAME_OPTIONS) > 0:
-        git_blame_opts.extend(BLAME_OPTIONS)
     git_blame_opts.extend(["--", file_name])
     return run_git_command(git_blame_opts)
 
@@ -287,7 +287,12 @@ def find_deleting_parent_from_merge(original_filename, deleted_line, merge_revis
     best_revision = None # where we will hold the best revision so far
     for parent in parents:
         found_deleted_line = False
-        diff_output = run_git_command(["diff", "--no-color", parent + ".." + merge_revision, "--", original_filename]).split("\n")
+        diff_command = ["diff"]
+        if len(DIFF_OPTIONS) > 0:
+            diff_command.extend(DIFF_OPTIONS)
+        diff_command.extend(["--no-color", parent + ".." + merge_revision, "--", original_filename])
+        
+        diff_output = run_git_command(diff_command).split("\n")
         # have to track chunks to make sure the line requested was actually deleted on one of the chunks of the output
         starting_line = 0
         # let's find the position of the line that starts with @
