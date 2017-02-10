@@ -232,10 +232,14 @@ def revisions_pointing(target_revision, starting_from):
     git_output=run_git_command(["log", "--pretty=%H%n%P", target_revision + ".." + starting_from]).split("\n")[:-1]
     i=0
     children=[]
-    # TODO performance: while crossing over this line of revisions, if the parents of a revision haven't been set up yet, we add them
     while i < len(git_output):
-        if git_output[i+1].find(target_revision) != -1:
-            children.append(git_output[i])
+        revision=git_output[i]
+        parents = git_output[i+1]
+        if revision not in PARENT_REVISIONS_CACHE:
+            # let's add all thes parents cause we don't have them
+            PARENT_REVISIONS_CACHE[revision] = parents.split(" ")
+        if parents.find(target_revision) != -1:
+            children.append(revision)
         i+=2
     CHILD_REVISIONS_CACHE[target_revision] = children
     return children
