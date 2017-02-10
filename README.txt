@@ -63,7 +63,7 @@ options:
         if user doesn't specify --color/--no-color options then output will use
         color if process is connected to a terminal
         
-    -w: skip space changes (both in diff and blame)
+    -w: skip space changes (in both diff and blame)
     
     --hints: when printing added lines, provide the hint (one-line summary of the revision)
         before the lines themselves.
