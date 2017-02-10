@@ -23,6 +23,10 @@ OPTIONS=dict()
 OPTIONS['HINTS']=False # no hints
 OPTIONS['COLOR']=False
 
+# options used for diff and blame
+DIFF_OPTIONS=[]
+BLAME_OPTIONS=[]
+
 
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
@@ -74,7 +78,7 @@ def get_full_revision_id(revision):
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
 
-def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original_treeish=None):
+def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=None):
     """
     Get blame for especified hunk positions
     Prepending 'a/' or '/b' from file_name will be removed if present
@@ -114,12 +118,12 @@ def get_blame_info_hunk(blame_opts, treeish, file_name, hunk_positions, original
         # reverse blame
         git_blame_opts.extend(["--reverse", "-s", original_treeish + ".." + treeish])
     
-    if len(blame_opts) > 0:
-        git_blame_opts.extend(blame_opts)
+    if len(BLAME_OPTIONS) > 0:
+        git_blame_opts.extend(BLAME_OPTIONS)
     git_blame_opts.extend(["--", file_name])
     return run_git_command(git_blame_opts)
 
-def process_hunk_from_diff_output(blame_params, output_lines, starting_line, original_name, final_name, treeish1, treeish2):
+def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
     Process a diff hunk from a file
     A hunk starts with a line that starts with @ and describes the position of the block of code in original file and ending file
@@ -338,7 +342,7 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
     
     # done printing the hunk
 
-def process_file_from_diff_output(blame_opts, output_lines, starting_line, treeish1, treeish2):
+def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2):
     """
     process diff output for a line.
     Will return position (index of line) of next file in diff outtput
@@ -377,15 +381,15 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0]=='@':
         # found hunk mark (@)
-        (hunk_content, hunk_positions) = process_hunk_from_diff_output(blame_params, output_lines, i, original_name, final_name, treeish1, treeish2)
+        (hunk_content, hunk_positions) = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
         hunks.append(hunk_content)
         original_hunk_positions.append(hunk_positions[0])
         final_hunk_positions.append(hunk_positions[1])
         i+=len(hunk_content)
     
     # pull blame from all hunks
-    original_file_blame=get_blame_info_hunk(blame_opts, treeish2, original_name, original_hunk_positions, treeish1).split("\n")
-    final_file_blame=get_blame_info_hunk(blame_opts, treeish2, final_name, final_hunk_positions).split("\n")
+    original_file_blame=get_blame_info_hunk(treeish2, original_name, original_hunk_positions, treeish1).split("\n")
+    final_file_blame=get_blame_info_hunk(treeish2, final_name, final_hunk_positions).split("\n")
     
     # print hunks
     for hunk_content in hunks:
@@ -394,7 +398,7 @@ def process_file_from_diff_output(blame_opts, output_lines, starting_line, treei
     
     return i
 
-def process_diff_output(blame_params, output, treeish1, treeish2):
+def process_diff_output(output, treeish1, treeish2):
     global HINTS
     """
     process diff output
@@ -412,11 +416,9 @@ def process_diff_output(blame_params, output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(blame_params, lines, i, treeish1, treeish2)
+        i = process_file_from_diff_output(lines, i, treeish1, treeish2)
 
 # parameters
-diff_params=[]
-blame_params=[]
 treeish1=None
 treeish2=None
 paths=[]
@@ -445,9 +447,9 @@ for param in sys.argv[1:]:
                 elif param.startswith("--diff-param=") or param.startswith("-dp="):
                     # diff param
                     diff_param=param[param.index('=') + 1:]
-                    diff_params.append(diff_param)
+                    DIFF_OPTIONS.append(diff_param)
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
-                    blame_params.append(param[param.index('=') + 1:])
+                    BLAME_OPTIONS.append(param[param.index('=') + 1:])
                 elif param in ["--tips", "--hints"]:
                     OPTIONS['HINTS']=True
                 elif param == "--git-debug":
@@ -456,8 +458,8 @@ for param in sys.argv[1:]:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
             # avoid space changes
-            blame_params.append(param)
-            diff_params.append(param)
+            BLAME_OPTIONS.append(param)
+            DIFF_OPTIONS.append(param)
         else:
             # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
             if treeish1 is not None:
@@ -495,7 +497,7 @@ diff_output = None
 try:
     git_diff_params=["diff"]
     git_diff_params.append('--no-color')
-    git_diff_params.extend(diff_params)
+    git_diff_params.extend(DIFF_OPTIONS)
     git_diff_params.append(treeish1 + ".." + treeish2)
     if len(paths) > 0:
         # only get diff for some paths
@@ -510,7 +512,7 @@ except:
     sys.exit(1)
 
 # processing diff output
-process_diff_output(blame_params, diff_output, treeish1, treeish2)
+process_diff_output(diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
