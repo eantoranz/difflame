@@ -147,7 +147,7 @@ class DiffFileObject:
         original_file_blame = self.getOriginalFileBlame()
         final_file_blame = self.getFinalFileBlame()
         for hunk in self.hunks:
-            hunk.stdoutPrint(self.final_revision, original_file_blame, final_file_blame)
+            hunk.stdoutPrint(original_file_blame, final_file_blame)
             
 class DiffHunk:
     '''
@@ -157,7 +157,7 @@ class DiffHunk:
         self.positions = positions
         self.raw_content = raw_content
 
-    def stdoutPrint(self, treeish2, original_file_blame, final_file_blame):
+    def stdoutPrint(self, original_file_blame, final_file_blame):
         """
         Print hunk on stdout
         """
@@ -191,7 +191,7 @@ class DiffHunk:
                 # it's a line that was deleted so have to pull it from original_blame
                 blame_line = original_file_blame.pop(0)
                 # what is the _real_ revision where the lines were deleted?
-                (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
+                (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, self.diff_file_object.final_revision)
                 # print hint if needed
                 print_revision_line(deletion_revision, previous_revision, False)
                 if found_real_revision:
