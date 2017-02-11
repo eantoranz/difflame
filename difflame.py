@@ -46,6 +46,23 @@ CHILD_REVISIONS_CACHE=dict()
 # information displayed for each revision on modified lines
 REVISIONS_INFO_CACHE=dict()
 
+class DiffFileObject:
+    '''
+    Object to hold the content of diff for a file
+    
+    Will keep 2 things:
+        - raw_content: array of lines that make up the raw diff output
+        - hunks: array of hunks that make up the diff output
+    '''
+    
+    def __init__(self, starting_revision, final_revision, original_name, final_name, raw_content, hunks):
+        self.starting_revision = starting_revision
+        self.final_revision = final_revision
+        self.original_name = original_name
+        self.final_name = final_name
+        self.raw_content = raw_content
+        self.hunks = hunks
+
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
     """
@@ -342,38 +359,44 @@ def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
     
     # done printing the hunk
 
-def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2):
+def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2, generate_blame = False):
     """
-    process diff output for a line.
-    Will return position (index of line) of next file in diff outtput
+    process diff output
+    Will return a tuple:
+        (DiffFileObject corresponding to the file, position (index of line) of next file in diff outtput, original file blame, final file blame)
     """
     # First is a 'diff' line
+    raw_content = []
     i=starting_line
     diff_line = output_lines[i].split()
     if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
     original_name = diff_line[2]
     final_name = diff_line[3]
-    print output_lines[i]; i+=1
+    #print output_lines[i]; i+=1
+    raw_content.append(output_lines[i]); i+=1
     
     # let's get to the line that starts with ---
     while i < len(output_lines) and not output_lines[i].startswith("---"):
         if output_lines[i].startswith("diff"):
             # just finished a file without content changes
-            return i
-        print output_lines[i]; i+=1
+            return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
+        #print output_lines[i]; i+=1
+        raw_content.append(output_lines[i]); i+=1
     
     if i >= len(output_lines):
         # a file without content was the last on the patch
-        return i
+        return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
     
-    print output_lines[i]; i+=1 # line with ---
+    #print output_lines[i]; i+=1 # line with ---
+    raw_content.append(output_lines[i]); i+=1 # line with ---
     
     # next should begin with +++
     if not output_lines[i].startswith("+++"):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
-    print output_lines[i]; i+=1 # line with +++
+    #print output_lines[i]; i+=1 # line with +++
+    raw_content.append(output_lines[i]); i+=1 # line with +++
     
     # Now we start going through the hunks until we don't have a hunk starter mark
     hunks = []
@@ -388,15 +411,32 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
         i+=len(hunk_content)
     
     # pull blame from all hunks
-    original_file_blame=get_blame_info_hunk(treeish2, original_name, original_hunk_positions, treeish1).split("\n")
-    final_file_blame=get_blame_info_hunk(treeish2, final_name, final_hunk_positions).split("\n")
+    if generate_blame:
+        original_file_blame=get_blame_info_hunk(treeish2, original_name, original_hunk_positions, treeish1).split("\n")
+        final_file_blame=get_blame_info_hunk(treeish2, final_name, final_hunk_positions).split("\n")
+    else:
+        original_file_blame = None
+        final_file_blame = None
     
     # print hunks
-    for hunk_content in hunks:
-        print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
+    #for hunk_content in hunks:
+    #    print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
     
+    return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks), i, original_file_blame, final_file_blame)
+
+def print_diff_output(diff_file_object, original_file_blame, final_file_blame):
+    '''
+    Print the content of the diff for this file (with blame information, the whole package)
+    '''
+    #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
+    i=0
+    while i < len(diff_file_object.raw_content) and diff_file_object.raw_content[i][0] != '@':
+        print diff_file_object.raw_content[i]
+        i+=1
     
-    return i
+    # print hunks
+    for hunk in diff_file_object.hunks:
+        print_hunk(diff_file_object.final_revision, hunk, original_file_blame, final_file_blame)
 
 def process_diff_output(output, treeish1, treeish2):
     global HINTS
@@ -416,7 +456,8 @@ def process_diff_output(output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        i = process_file_from_diff_output(lines, i, treeish1, treeish2)
+        (diff_file_object, i, original_file_blame, final_file_blame) = process_file_from_diff_output(lines, i, treeish1, treeish2, True)
+        print_diff_output(diff_file_object, original_file_blame, final_file_blame)
 
 # parameters
 treeish1=None
