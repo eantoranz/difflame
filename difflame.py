@@ -76,10 +76,62 @@ class DiffFileObject:
             hunk.diff_file_object = self
     
     def getOriginalFileBlame(self):
-        return get_blame_info_hunk(self.final_revision, self.original_name, self.original_hunk_positions, self.starting_revision).split("\n")
+        return self.get_blame_info_hunk(True).split("\n")
     
     def getFinalFileBlame(self):
-        return get_blame_info_hunk(self.final_revision, self.final_name, self.final_hunk_positions).split("\n")
+        return self.get_blame_info_hunk().split("\n")
+
+    def get_blame_info_hunk(self, reverse = False):
+        """
+        Get blame for especified hunk positions
+        Prepending 'a/' or '/b' from file_name will be removed if present
+        Hunk positions especify starting line and size of hunk in lines
+        
+        If original_treeish is set up, it means it's a reverse blame to get deleted lines
+        """
+        # clean up file_name from prepending a/ or b/ (if present)
+        if reverse:
+            file_name = self.original_name
+            hunk_positions = self.original_hunk_positions
+        else:
+            file_name = self.final_name
+            hunk_positions = self.final_hunk_positions
+        
+        if file_name.startswith('a/') or file_name.startswith('b/'):
+            file_name = file_name[2:]
+        
+        # starting to build git command arguments
+        git_blame_opts=["blame", "--no-progress"]
+        
+        for hunk_position in hunk_positions:
+            hunk_position = hunk_position.split(',')
+            if len(hunk_position) == 1:
+                # there was a single number in file position (single line file), let's complete it with a 1
+                hunk_position.append("1")
+            starting_line=int(hunk_position[0])
+            if starting_line == 0:
+                # file doesn't exist exist so no content
+                return ""
+            if starting_line < 0:
+                # original file starting line positions in hunk descriptors are negative
+                starting_line*=-1
+            if len(hunk_position) == 1:
+                # single line file
+                ending_line = starting_line
+            else:
+                ending_line=starting_line+int(hunk_position[1])-1
+            git_blame_opts.extend(['-L', str(starting_line) + "," + str(ending_line)])
+        if not reverse:
+            # normal blame on final_revision
+            git_blame_opts.append(self.final_revision)
+        else:
+            # reverse blame
+            git_blame_opts.extend(["--reverse", "-s", self.starting_revision + ".." + self.final_revision])
+        
+        if len(BLAME_OPTIONS) > 0:
+            git_blame_opts.extend(BLAME_OPTIONS)
+        git_blame_opts.extend(["--", file_name])
+        return run_git_command(git_blame_opts)
 
     def stdoutPrint(self):
         '''
@@ -192,51 +244,6 @@ def get_full_revision_id(revision):
     full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
-
-def get_blame_info_hunk(treeish, file_name, hunk_positions, original_treeish=None):
-    """
-    Get blame for especified hunk positions
-    Prepending 'a/' or '/b' from file_name will be removed if present
-    Hunk positions especify starting line and size of hunk in lines
-    
-    If original_treeish is set up, it means it's a reverse blame to get deleted lines
-    """
-    # clean up file_name from prepending a/ or b/ (if present)
-    if file_name.startswith('a/') or file_name.startswith('b/'):
-        file_name = file_name[2:]
-    
-    # starting to build git command arguments
-    git_blame_opts=["blame", "--no-progress"]
-    
-    for hunk_position in hunk_positions:
-        hunk_position = hunk_position.split(',')
-        if len(hunk_position) == 1:
-            # there was a single number in file position (single line file), let's complete it with a 1
-            hunk_position.append("1")
-        starting_line=int(hunk_position[0])
-        if starting_line == 0:
-            # file doesn't exist exist so no content
-            return ""
-        if starting_line < 0:
-            # original file starting line positions in hunk descriptors are negative
-            starting_line*=-1
-        if len(hunk_position) == 1:
-            # single line file
-            ending_line = starting_line
-        else:
-            ending_line=starting_line+int(hunk_position[1])-1
-        git_blame_opts.extend(['-L', str(starting_line) + "," + str(ending_line)])
-    if original_treeish is None:
-        # normal blame on treeish1
-        git_blame_opts.append(treeish)
-    else:
-        # reverse blame
-        git_blame_opts.extend(["--reverse", "-s", original_treeish + ".." + treeish])
-    
-    if len(BLAME_OPTIONS) > 0:
-        git_blame_opts.extend(BLAME_OPTIONS)
-    git_blame_opts.extend(["--", file_name])
-    return run_git_command(git_blame_opts)
 
 def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
     """
