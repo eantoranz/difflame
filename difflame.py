@@ -55,13 +55,19 @@ class DiffFileObject:
         - hunks: array of hunks that make up the diff output
     '''
     
-    def __init__(self, starting_revision, final_revision, original_name, final_name, raw_content, hunks):
+    def __init__(self, starting_revision, final_revision, original_name, final_name, raw_content, hunks, original_file_blame, final_file_blame):
         self.starting_revision = starting_revision
         self.final_revision = final_revision
         self.original_name = original_name
         self.final_name = final_name
         self.raw_content = raw_content
         self.hunks = hunks # DiffHunk instances
+        self.original_file_blame = original_file_blame
+        self.final_file_blame = final_file_blame
+        
+        # let's make hunks point to this diff instance
+        for hunk in hunks:
+            hunk.diff_file_object = self
 
 class DiffHunk:
     '''
@@ -71,9 +77,11 @@ class DiffHunk:
         self.positions = positions
         self.raw_content = raw_content
 
-    def stdoutPrint(self, treeish2, original_file_blame, final_file_blame):
+    def stdoutPrint(self, treeish2):
         """
         Print hunk on stdout
+        
+        will destroy the content of hunk's original_file_blame and final_file_blame
         """
         print self.raw_content[0] # hunk descrtiptor line
         previous_revision=None
@@ -81,14 +89,14 @@ class DiffHunk:
             if line[0] in [' ', ]:
                 # added line (no color) or unchanged line
                 # print line from final blame
-                blame_line = final_file_blame.pop(0)
+                blame_line = self.diff_file_object.final_file_blame.pop(0)
                 # move on the original_blame cause we got blame info from final_file_blame
-                original_file_blame.pop(0)
+                self.diff_file_object.original_file_blame.pop(0)
                 # reset previous revision
                 previous_revision=None
                 print line[0] + blame_line
             elif line[0] == '+':
-                blame_line = final_file_blame.pop(0)
+                blame_line = self.diff_file_object.final_file_blame.pop(0)
                 # have to process revision to see it we need to print hint before the revision
                 current_revision = process_added_line(blame_line)
                 previous_revision = print_revision_line(current_revision, previous_revision, True)
@@ -103,7 +111,7 @@ class DiffHunk:
                 print ""
             elif line[0] == '-':
                 # it's a line that was deleted so have to pull it from original_blame
-                blame_line = original_file_blame.pop(0)
+                blame_line = self.diff_file_object.original_file_blame.pop(0)
                 # what is the _real_ revision where the lines were deleted?
                 (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
                 # print hint if needed
@@ -369,7 +377,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     """
     process diff output
     Will return a tuple:
-        (DiffFileObject corresponding to the file, position (index of line) of next file in diff outtput, original file blame, final file blame)
+        (DiffFileObject corresponding to the file, position (index of line) of next file in diff outtput)
     """
     # First is a 'diff' line
     raw_content = []
@@ -420,9 +428,9 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
         original_file_blame = None
         final_file_blame = None
     
-    return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks), i, original_file_blame, final_file_blame)
+    return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks, original_file_blame, final_file_blame), i)
 
-def print_diff_output(diff_file_object, original_file_blame, final_file_blame):
+def print_diff_output(diff_file_object):
     '''
     Print the content of the diff for this file (with blame information, the whole package)
     '''
@@ -434,7 +442,7 @@ def print_diff_output(diff_file_object, original_file_blame, final_file_blame):
     
     # print hunks
     for hunk in diff_file_object.hunks:
-        hunk.stdoutPrint(diff_file_object.final_revision, original_file_blame, final_file_blame)
+        hunk.stdoutPrint(diff_file_object.final_revision)
 
 def process_diff_output(output, treeish1, treeish2):
     global HINTS
@@ -454,8 +462,8 @@ def process_diff_output(output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
-        (diff_file_object, i, original_file_blame, final_file_blame) = process_file_from_diff_output(lines, i, treeish1, treeish2, True)
-        print_diff_output(diff_file_object, original_file_blame, final_file_blame)
+        (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2, True)
+        print_diff_output(diff_file_object)
 
 # parameters
 treeish1=None
