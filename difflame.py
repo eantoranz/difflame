@@ -71,6 +71,62 @@ class DiffHunk:
         self.positions = positions
         self.raw_content = raw_content
 
+    def stdoutPrint(self, treeish2, original_file_blame, final_file_blame):
+        """
+        Print hunk on stdout
+        """
+        print self.raw_content[0] # hunk descrtiptor line
+        previous_revision=None
+        for line in self.raw_content[1:]:
+            if line[0] in [' ', ]:
+                # added line (no color) or unchanged line
+                # print line from final blame
+                blame_line = final_file_blame.pop(0)
+                # move on the original_blame cause we got blame info from final_file_blame
+                original_file_blame.pop(0)
+                # reset previous revision
+                previous_revision=None
+                print line[0] + blame_line
+            elif line[0] == '+':
+                blame_line = final_file_blame.pop(0)
+                # have to process revision to see it we need to print hint before the revision
+                current_revision = process_added_line(blame_line)
+                previous_revision = print_revision_line(current_revision, previous_revision, True)
+                # print line from final blame with color adjusted
+                if OPTIONS['COLOR']:
+                    sys.stdout.write(COLOR_LINE_ADDED_MARKER)
+                else:
+                    sys.stdout.write('+')
+                sys.stdout.write(blame_line)
+                if OPTIONS['COLOR']:
+                    sys.stdout.write(COLOR_RESET)
+                print ""
+            elif line[0] == '-':
+                # it's a line that was deleted so have to pull it from original_blame
+                blame_line = original_file_blame.pop(0)
+                # what is the _real_ revision where the lines were deleted?
+                (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
+                # print hint if needed
+                print_revision_line(deletion_revision, previous_revision, False)
+                if found_real_revision:
+                    # got the revision where the line was deleted... let's show it
+                    print_deleted_revision_info(deletion_revision)
+                else:
+                    # didn't find the revision where the line was deleted... let's show it with the original revision
+                    print_deleted_revision_info(deletion_revision, original_revision)
+                # line number and content
+                sys.stdout.write(blame_line[blame_line.find(' '):])
+                if OPTIONS['COLOR']:
+                    sys.stdout.write(COLOR_RESET)
+                previous_revision = deletion_revision
+                print ""
+            elif line[0]=='\\':
+                # print original line, nothing is added
+                print line
+                # reset previous revision
+                previous_revision=None
+    
+    # done printing the hunk
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
     """
@@ -309,63 +365,6 @@ def print_deleted_revision_info(revision_id, original_revision = None):
     else:
         sys.stdout.write('-' + info)
 
-def print_hunk(treeish2, hunk, original_file_blame, final_file_blame):
-    """
-    Print hunk on difflame output
-    """
-    print hunk.raw_content[0] # hunk descrtiptor line
-    previous_revision=None
-    for line in hunk.raw_content[1:]:
-        if line[0] in [' ', ]:
-            # added line (no color) or unchanged line
-            # print line from final blame
-            blame_line = final_file_blame.pop(0)
-            # move on the original_blame cause we got blame info from final_file_blame
-            original_file_blame.pop(0)
-            # reset previous revision
-            previous_revision=None
-            print line[0] + blame_line
-        elif line[0] == '+':
-            blame_line = final_file_blame.pop(0)
-            # have to process revision to see it we need to print hint before the revision
-            current_revision = process_added_line(blame_line)
-            previous_revision = print_revision_line(current_revision, previous_revision, True)
-            # print line from final blame with color adjusted
-            if OPTIONS['COLOR']:
-                sys.stdout.write(COLOR_LINE_ADDED_MARKER)
-            else:
-                sys.stdout.write('+')
-            sys.stdout.write(blame_line)
-            if OPTIONS['COLOR']:
-                sys.stdout.write(COLOR_RESET)
-            print ""
-        elif line[0] == '-':
-            # it's a line that was deleted so have to pull it from original_blame
-            blame_line = original_file_blame.pop(0)
-            # what is the _real_ revision where the lines were deleted?
-            (found_real_revision, deletion_revision, original_revision) = process_deleted_line(blame_line, treeish2)
-            # print hint if needed
-            print_revision_line(deletion_revision, previous_revision, False)
-            if found_real_revision:
-                # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(deletion_revision)
-            else:
-                # didn't find the revision where the line was deleted... let's show it with the original revision
-                print_deleted_revision_info(deletion_revision, original_revision)
-            # line number and content
-            sys.stdout.write(blame_line[blame_line.find(' '):])
-            if OPTIONS['COLOR']:
-                sys.stdout.write(COLOR_RESET)
-            previous_revision = deletion_revision
-            print ""
-        elif line[0]=='\\':
-            # print original line, nothing is added
-            print line
-            # reset previous revision
-            previous_revision=None
-    
-    # done printing the hunk
-
 def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2, generate_blame = False):
     """
     process diff output
@@ -435,7 +434,7 @@ def print_diff_output(diff_file_object, original_file_blame, final_file_blame):
     
     # print hunks
     for hunk in diff_file_object.hunks:
-        print_hunk(diff_file_object.final_revision, hunk, original_file_blame, final_file_blame)
+        hunk.stdoutPrint(diff_file_object.final_revision, original_file_blame, final_file_blame)
 
 def process_diff_output(output, treeish1, treeish2):
     global HINTS
