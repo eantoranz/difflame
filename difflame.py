@@ -61,7 +61,15 @@ class DiffFileObject:
         self.original_name = original_name
         self.final_name = final_name
         self.raw_content = raw_content
-        self.hunks = hunks
+        self.hunks = hunks # DiffHunk instances
+
+class DiffHunk:
+    '''
+    Object to hold hunk information
+    '''
+    def __init__(self, positions, raw_content):
+        self.positions = positions
+        self.raw_content = raw_content
 
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
@@ -156,7 +164,6 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
     
     # what will be returned
     hunk_content = []
-    hunk_positions = [] # a pair with position,size of original file and final file
     
     i = starting_line
     hunk_description_line = output_lines[i]
@@ -182,7 +189,7 @@ def process_hunk_from_diff_output(output_lines, starting_line, original_name, fi
         i+=1
     
     # got to the end of the hunk
-    return (hunk_content, [original_file_hunk_pos, final_file_hunk_pos])
+    return DiffHunk([original_file_hunk_pos, final_file_hunk_pos], hunk_content)
 
 def get_revision_from_modified_line(line):
     """
@@ -302,13 +309,13 @@ def print_deleted_revision_info(revision_id, original_revision = None):
     else:
         sys.stdout.write('-' + info)
 
-def print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame):
+def print_hunk(treeish2, hunk, original_file_blame, final_file_blame):
     """
     Print hunk on difflame output
     """
-    print hunk_content[0] # hunk descrtiptor line
+    print hunk.raw_content[0] # hunk descrtiptor line
     previous_revision=None
-    for line in hunk_content[1:]:
+    for line in hunk.raw_content[1:]:
         if line[0] in [' ', ]:
             # added line (no color) or unchanged line
             # print line from final blame
@@ -373,7 +380,6 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
     original_name = diff_line[2]
     final_name = diff_line[3]
-    #print output_lines[i]; i+=1
     raw_content.append(output_lines[i]); i+=1
     
     # let's get to the line that starts with ---
@@ -381,21 +387,18 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
         if output_lines[i].startswith("diff"):
             # just finished a file without content changes
             return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
-        #print output_lines[i]; i+=1
         raw_content.append(output_lines[i]); i+=1
     
     if i >= len(output_lines):
         # a file without content was the last on the patch
         return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
     
-    #print output_lines[i]; i+=1 # line with ---
     raw_content.append(output_lines[i]); i+=1 # line with ---
     
     # next should begin with +++
     if not output_lines[i].startswith("+++"):
         raise Exception("Was expecting line with +++ for a file (" + original_name + ", " + final_name + ")")
     
-    #print output_lines[i]; i+=1 # line with +++
     raw_content.append(output_lines[i]); i+=1 # line with +++
     
     # Now we start going through the hunks until we don't have a hunk starter mark
@@ -404,11 +407,11 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     final_hunk_positions = []
     while i < len(output_lines) and len(output_lines[i]) > 0 and output_lines[i][0]=='@':
         # found hunk mark (@)
-        (hunk_content, hunk_positions) = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
-        hunks.append(hunk_content)
-        original_hunk_positions.append(hunk_positions[0])
-        final_hunk_positions.append(hunk_positions[1])
-        i+=len(hunk_content)
+        hunk = process_hunk_from_diff_output(output_lines, i, original_name, final_name, treeish1, treeish2)
+        hunks.append(hunk)
+        original_hunk_positions.append(hunk.positions[0])
+        final_hunk_positions.append(hunk.positions[1])
+        i+=len(hunk.raw_content)
     
     # pull blame from all hunks
     if generate_blame:
@@ -417,10 +420,6 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     else:
         original_file_blame = None
         final_file_blame = None
-    
-    # print hunks
-    #for hunk_content in hunks:
-    #    print_hunk(treeish2, hunk_content, original_file_blame, final_file_blame)
     
     return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks), i, original_file_blame, final_file_blame)
 
