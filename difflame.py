@@ -81,6 +81,22 @@ class DiffFileObject:
     def getFinalFileBlame(self):
         return get_blame_info_hunk(self.final_revision, self.final_name, self.final_hunk_positions).split("\n")
 
+    def stdoutPrint(self):
+        '''
+        Print the content of the diff for this file (with blame information, the whole package)
+        '''
+        #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
+        i=0
+        while i < len(self.raw_content) and self.raw_content[i][0] != '@':
+            print self.raw_content[i]
+            i+=1
+        
+        # print hunks
+        original_file_blame = self.getOriginalFileBlame()
+        final_file_blame = self.getFinalFileBlame()
+        for hunk in self.hunks:
+            hunk.stdoutPrint(self.final_revision, original_file_blame, final_file_blame)
+            
 class DiffHunk:
     '''
     Object to hold hunk information
@@ -89,14 +105,12 @@ class DiffHunk:
         self.positions = positions
         self.raw_content = raw_content
 
-    def stdoutPrint(self, treeish2):
+    def stdoutPrint(self, treeish2, original_file_blame, final_file_blame):
         """
         Print hunk on stdout
         """
         print self.raw_content[0] # hunk descrtiptor line
         previous_revision=None
-        original_file_blame = self.diff_file_object.getOriginalFileBlame()
-        final_file_blame = self.diff_file_object.getFinalFileBlame()
         for line in self.raw_content[1:]:
             if line[0] in [' ', ]:
                 # added line (no color) or unchanged line
@@ -434,20 +448,6 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     
     return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks, original_hunk_positions, final_hunk_positions), i)
 
-def print_diff_output(diff_file_object):
-    '''
-    Print the content of the diff for this file (with blame information, the whole package)
-    '''
-    #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
-    i=0
-    while i < len(diff_file_object.raw_content) and diff_file_object.raw_content[i][0] != '@':
-        print diff_file_object.raw_content[i]
-        i+=1
-    
-    # print hunks
-    for hunk in diff_file_object.hunks:
-        hunk.stdoutPrint(diff_file_object.final_revision)
-
 def process_diff_output(output, treeish1, treeish2):
     global HINTS
     """
@@ -467,7 +467,7 @@ def process_diff_output(output, treeish1, treeish2):
             # got to the end of the diff output
             break
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
-        print_diff_output(diff_file_object)
+        diff_file_object.stdoutPrint()
 
 # parameters
 treeish1=None
