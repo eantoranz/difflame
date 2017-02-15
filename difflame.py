@@ -49,6 +49,22 @@ PARENT_REVISIONS_CACHE=dict() # TODO does it have to be calculated depending on 
 # information displayed for each revision on modified lines
 REVISIONS_INFO_CACHE=dict()
 
+'''
+caches to save:
+    - reverse blamed files # TODO consider cleaning this when we finish processing a file
+    - diff of files when analyzing revisions (merges and so on)
+
+BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
+use get_reverse_blamed_line()
+
+DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
+use get_line_in_revision()
+
+filename is as it shows up on final_revision
+'''
+BLAMED_FILES_CACHE = None
+DIFF_FILES_CACHE = None
+
 class DiffFileObject:
     '''
     Object to hold the content of diff for a file
@@ -457,7 +473,7 @@ def get_line_number_from_deleted_line(deleted_line):
         i-=1
     return int(deleted_line[i+1:parenthesis_index])
 
-def get_line_in_revision(original_revision, filename, line_number, final_revision):
+def get_line_in_revision(original_revision, final_revision, filename, line_number):
     '''
     Get the line number for final_revision of the line that was line_number on original_revision
     filename has to be the name of the file on the _final_revision_
@@ -465,9 +481,16 @@ def get_line_in_revision(original_revision, filename, line_number, final_revisio
     If the line is not present anymore (was deleted), will return None
     '''
     # let's create a hunk from the diff
-    output = run_git_diff(["--no-color", original_revision + ".." + final_revision, "--", filename]).split("\n")
-    (diff_object, i) = process_file_from_diff_output(output, 0, original_revision, final_revision)
+    if original_revision not in DIFF_FILES_CACHE:
+        DIFF_FILES_CACHE[original_revision] = dict()
+    if final_revision not in DIFF_FILES_CACHE[original_revision]:
+        DIFF_FILES_CACHE[original_revision][final_revision] = dict()
+    if filename not in DIFF_FILES_CACHE[original_revision][final_revision]:
+        output = run_git_diff(["--no-color", original_revision + ".." + final_revision, "--", filename]).split("\n")
+        (diff_object, i) = process_file_from_diff_output(output, 0, original_revision, final_revision)
+        DIFF_FILES_CACHE[original_revision][final_revision][filename] = diff_object
     
+    diff_object = DIFF_FILES_CACHE[original_revision][final_revision][filename]
     if diff_object is None:
         # no change
         return line_number
@@ -512,10 +535,10 @@ def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_nu
       If the line number on a given parent is None, it means the line was deleted
     '''
     original_filename = cleanup_filename(original_filename)
-    # will do a diff between the blamed revision and its parent and will try to see in which revision the line was deleted
-    best_revision = None # where we will hold the best revision so far
+    # will do a diff between the parent and treeish1 and will try to see in which revision the line was deleted
+    best_revision = None # where we will hold the best revision so far # TODO not using it, going through the first node
     for parent in parents:
-        line_number=get_line_in_revision(treeish1, original_filename, deleted_line_number, parent)
+        line_number=get_line_in_revision(treeish1, parent, original_filename, deleted_line_number)
         if line_number is None:
             # line was deleted coming from this parent... no need to go further
             return parent
@@ -531,6 +554,21 @@ def find_file_line_on_revision(treeish2, filename, line_number, revision):
     '''
     diff_output=run_git_diff([treeish2 + ".." + revision, "--", filename])
     # TODO complete this in order to be able to handle renames
+
+def get_reverse_blamed_line(original_revision, final_revision, filename, deleted_line_number):
+    '''
+    Get the desired blame line from reverse blame
+    
+    - filename is the name of the file on the final_revision
+    '''
+    if original_revision not in BLAMED_FILES_CACHE:
+        BLAMED_FILES_CACHE[original_revision]=dict()
+    if final_revision not in BLAMED_FILES_CACHE[original_revision]:
+        BLAMED_FILES_CACHE[original_revision][final_revision]=dict()
+    if filename not in BLAMED_FILES_CACHE[original_revision][final_revision]:
+        # will get content for blamed file
+        BLAMED_FILES_CACHE[original_revision][final_revision][filename] = run_git_blame(["--reverse", "-s", original_revision + ".." + final_revision, "--", filename]).split("\n")
+    return BLAMED_FILES_CACHE[original_revision][final_revision][filename][deleted_line_number -1]
     
 def process_deleted_line(treeish1, treeish2, original_filename, final_filename, deleted_line_number, blamed_revision):
     """
@@ -572,7 +610,8 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
             return (True, blamed_revision)
         else:
             # let's make a recursive analysis of blame to see what is the "new" blamed revision if we start from here
-            line = run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + deleting_parent, "--", cleanup_filename(final_filename)]) # TODO have to use the name of the file on the deleting_parent
+            line = get_reverse_blamed_line(treeish1, deleting_parent, cleanup_filename(final_filename), deleted_line_number)
+            #line = run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + deleting_parent, "--", ) # TODO have to use the name of the file on the deleting_parent
             new_blamed_revision = get_full_revision_id(line.split(" ")[0])
             '''
             need to process this result further
@@ -664,7 +703,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks, original_hunk_positions, final_hunk_positions), i)
 
 def process_diff_output(output, treeish1, treeish2):
-    global HINTS
+    global HINTS, BLAMED_FILES_CACHE, DIFF_FILES_CACHE
     """
     process diff output
     """
@@ -681,6 +720,8 @@ def process_diff_output(output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
+        BLAMED_FILES_CACHE=dict()
+        DIFF_FILES_CACHE=dict()
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
         diff_file_object.stdoutPrint()
 
