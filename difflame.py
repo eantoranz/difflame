@@ -51,7 +51,7 @@ REVISIONS_INFO_CACHE=dict()
 
 '''
 caches to save:
-    - reverse blamed files # TODO consider cleaning this when we finish processing a file
+    - reverse blamed files
     - diff of files when analyzing revisions (merges and so on)
 
 BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
