@@ -55,7 +55,7 @@ BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
 
 filename is as it shows up on final_revision
 '''
-BLAMED_FILES_CACHE = dict()
+BLAMED_FILES_CACHE = None
 
 class DiffFileObject:
     '''
@@ -688,7 +688,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, hunks, original_hunk_positions, final_hunk_positions), i)
 
 def process_diff_output(output, treeish1, treeish2):
-    global HINTS
+    global HINTS, BLAMED_FILES_CACHE
     """
     process diff output
     """
@@ -705,6 +705,7 @@ def process_diff_output(output, treeish1, treeish2):
         if len(starting_line) == 0:
             # got to the end of the diff output
             break
+        BLAMED_FILES_CACHE=dict()
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
         diff_file_object.stdoutPrint()
 
