@@ -511,7 +511,6 @@ def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_nu
     # will do a diff between the blamed revision and its parent and will try to see in which revision the line was deleted
     best_revision = None # where we will hold the best revision so far
     for parent in parents:
-        found_deleted_line = False
         line_number=get_line_in_revision(treeish1, original_filename, deleted_line_number, parent)
         if line_number is None:
             # line was deleted coming from this parent... no need to go further
@@ -527,6 +526,7 @@ def find_file_line_on_revision(treeish2, filename, line_number, revision):
     If the line is deleted on 'revision', then None will be returned
     '''
     diff_output=run_git_diff([treeish2 + ".." + revision, "--", filename])
+    # TODO complete this in order to be able to handle renames
     
 def process_deleted_line(treeish1, treeish2, original_filename, final_filename, deleted_line_number, blamed_revision):
     """
@@ -535,10 +535,10 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
     - treeish1 and treeish2 are the 2 revisions that encompas the whole analysis
     - original_filename is the name of the file on treeish1
     - final_filename is the name of the file on treeish2
-    - deleted_line_number is the number of the deleted line on treeish2
+    - deleted_line_number is the number of the deleted line on treeish1
     - blamed_revision is the revision that is being asked to analyze to find the "real" revision where the line was deleted
         On the first call, it should be the revision as reported on the blamed line
-        On recursive calls (if needed) it should be a different path in order to find the real revision
+        On recursive calls (if needed) it should be a different path (modifying treeish2) in order to find the real revision
             where the line was deleted
     
     Will return a tuple:
@@ -549,6 +549,9 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
     """
     # let's find all revisions that are connected to this revisions starting from top_revision
     children=revisions_pointing_to(treeish1, treeish2, blamed_revision)
+    if len(children) == 0:
+        # let's return blamed revision
+        return (False, blamed_revision)
     if len(children) == 1:
         blamed_revision = children[0]
         parents = get_parent_revisions(blamed_revision)
@@ -574,7 +577,13 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
                 2 - deleting_parent
             '''
             # let's try to do it recursively now that the path has been "shortened"
-            return process_deleted_line(treeish1, deleting_parent, original_filename, final_filename, deleted_line_number, new_blamed_revision)
+            (found_revision, blamed_revision) = process_deleted_line(treeish1, deleting_parent, original_filename, final_filename, deleted_line_number, new_blamed_revision)
+            if blamed_revision == new_blamed_revision:
+                # merge analysis was not able to move forward from this new position
+                return (True, deleting_parent)
+            else:
+                # there was some progress
+                return (True, blamed_revision)
     # One "alleged" last revision with a line has more than one parent? Line was deleted from all parents at the same time?
     return (False, blamed_revision)
 
@@ -772,3 +781,8 @@ process_diff_output(diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
+
+sys.stderr.flush()
+sys.stderr.close()
+sys.stdout.flush()
+sys.stdout.close()
