@@ -417,6 +417,9 @@ def revisions_pointing_to(original_revision, final_revision, target_revision):
                     CHILD_REVISIONS_CACHE[original_revision][final_revision][parent] = []
                 CHILD_REVISIONS_CACHE[original_revision][final_revision][parent].append(revision)
             i+=2
+    if target_revision not in CHILD_REVISIONS_CACHE[original_revision][final_revision]:
+        # no children
+        return []
     return CHILD_REVISIONS_CACHE[original_revision][final_revision][target_revision]
 
 def get_parent_revisions(revision):
@@ -460,6 +463,10 @@ def get_line_in_revision(original_revision, filename, line_number, final_revisio
     # let's create a hunk from the diff
     output = run_git_diff(["--no-color", original_revision + ".." + final_revision, "--", filename]).split("\n")
     (diff_object, i) = process_file_from_diff_output(output, 0, original_revision, final_revision)
+    
+    if diff_object is None:
+        # no change
+        return line_number
     
     line_diff=0 # the difference in line numbers between original file and final file
     for hunk in diff_object.hunks:
@@ -601,6 +608,9 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     raw_content = []
     i=starting_line
     diff_line = output_lines[i].split()
+    if len(diff_line) == 0:
+        # probably no difference
+        return (None, starting_line)
     if diff_line[0] != "diff":
         raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
     original_name = diff_line[2]
@@ -611,12 +621,12 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     while i < len(output_lines) and not output_lines[i].startswith("---"):
         if output_lines[i].startswith("diff"):
             # just finished a file without content changes
-            return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
+            return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i)
         raw_content.append(output_lines[i]); i+=1
     
     if i >= len(output_lines):
         # a file without content was the last on the patch
-        return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i, None)
+        return (DiffFileObject(treeish1, treeish2, original_name, final_name, raw_content, []), i)
     
     raw_content.append(output_lines[i]); i+=1 # line with ---
     
