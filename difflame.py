@@ -49,6 +49,14 @@ PARENT_REVISIONS_CACHE=dict() # TODO does it have to be calculated depending on 
 # information displayed for each revision on modified lines
 REVISIONS_INFO_CACHE=dict()
 
+'''
+cache to save reverse blamed files # TODO consider cleaning this when we finish processing a file
+BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
+
+filename is as it shows up on final_revision
+'''
+BLAMED_FILES_CACHE = dict()
+
 class DiffFileObject:
     '''
     Object to hold the content of diff for a file
@@ -512,8 +520,8 @@ def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_nu
       If the line number on a given parent is None, it means the line was deleted
     '''
     original_filename = cleanup_filename(original_filename)
-    # will do a diff between the blamed revision and its parent and will try to see in which revision the line was deleted
-    best_revision = None # where we will hold the best revision so far
+    # will do a diff between the parent and treeish1 and will try to see in which revision the line was deleted
+    best_revision = None # where we will hold the best revision so far # TODO not using it, going through the first node
     for parent in parents:
         line_number=get_line_in_revision(treeish1, original_filename, deleted_line_number, parent)
         if line_number is None:
@@ -531,6 +539,21 @@ def find_file_line_on_revision(treeish2, filename, line_number, revision):
     '''
     diff_output=run_git_diff([treeish2 + ".." + revision, "--", filename])
     # TODO complete this in order to be able to handle renames
+
+def get_reverse_blamed_line(original_revision, final_revision, filename, deleted_line_number):
+    '''
+    Get the desired blame line from reverse blame
+    
+    - filename is the name of the file on the final_revision
+    '''
+    if original_revision not in BLAMED_FILES_CACHE:
+        BLAMED_FILES_CACHE[original_revision]=dict()
+    if final_revision not in BLAMED_FILES_CACHE[original_revision]:
+        BLAMED_FILES_CACHE[original_revision][final_revision]=dict()
+    if filename not in BLAMED_FILES_CACHE[original_revision][final_revision]:
+        # will get content for blamed file
+        BLAMED_FILES_CACHE[original_revision][final_revision][filename] = run_git_blame(["--reverse", "-s", original_revision + ".." + final_revision, "--", filename]).split("\n")
+    return BLAMED_FILES_CACHE[original_revision][final_revision][filename][deleted_line_number -1]
     
 def process_deleted_line(treeish1, treeish2, original_filename, final_filename, deleted_line_number, blamed_revision):
     """
@@ -572,7 +595,8 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
             return (True, blamed_revision)
         else:
             # let's make a recursive analysis of blame to see what is the "new" blamed revision if we start from here
-            line = run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + deleting_parent, "--", cleanup_filename(final_filename)]) # TODO have to use the name of the file on the deleting_parent
+            line = get_reverse_blamed_line(treeish1, deleting_parent, cleanup_filename(final_filename), deleted_line_number)
+            #line = run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + deleting_parent, "--", ) # TODO have to use the name of the file on the deleting_parent
             new_blamed_revision = get_full_revision_id(line.split(" ")[0])
             '''
             need to process this result further
