@@ -6,6 +6,7 @@
 
 import subprocess
 import sys
+from time import time
 
 # color codes
 COLOR_GREEN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d)
@@ -54,9 +55,14 @@ def run_git_command(args):
     command = ["git"]
     command.extend(args)
     if DEBUG_GIT:
+        starting_time=time()
         TOTAL_GIT_EXECUTIONS+=1
-        sys.stderr.write("git execution: " + str(command) + "\n")
-    return subprocess.check_output(command)
+        sys.stderr.write("git execution: " + str(command) + "...")
+    result = subprocess.check_output(command)
+    if DEBUG_GIT:
+        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
+        sys.stderr.flush()
+    return result
 
 def git_revision_hint(revision):
     """
