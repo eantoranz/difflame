@@ -216,8 +216,6 @@ class DiffHunk:
                 deleted_line_number = get_line_number_from_deleted_line(blame_line)
                 revision = get_revision_from_modified_line(blame_line)
                 original_revision = revision # so that we can print it later on if needed
-                if revision.startswith('^'):
-                    revision = revision[1:]
                 revision=get_full_revision_id(revision)
                 (found_real_revision, deletion_revision) = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, self.diff_file_object.original_name, self.diff_file_object.final_name, deleted_line_number, revision)
                 # print hint if needed
