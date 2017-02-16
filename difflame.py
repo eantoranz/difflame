@@ -120,7 +120,7 @@ class DiffFileObject:
             file_name = file_name[2:]
         
         # starting to build git command arguments
-        git_blame_opts=["blame", "--no-progress"]
+        git_blame_opts = []
         
         for hunk_position in hunk_positions:
             hunk_position = hunk_position.split(',')
@@ -147,10 +147,8 @@ class DiffFileObject:
             # reverse blame
             git_blame_opts.extend(["--reverse", "-s", self.starting_revision + ".." + self.final_revision])
         
-        if len(BLAME_OPTIONS) > 0:
-            git_blame_opts.extend(BLAME_OPTIONS)
         git_blame_opts.extend(["--", file_name])
-        return run_git_command(git_blame_opts)
+        return run_git_blame(git_blame_opts)
 
     def stdoutPrint(self):
         '''
@@ -231,19 +229,24 @@ class DiffHunk:
                 # what is the _real_ revision where the lines were deleted?
                 deleted_line_number = get_line_number_from_deleted_line(blame_line)
                 revision = get_revision_from_modified_line(blame_line)
-                original_revision = revision # so that we can print it later on if needed
+                original_revision = revision # so that we can print the exact text later on if needed
                 revision=get_full_revision_id(revision)
                 (found_real_revision, deletion_revision) = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, self.diff_file_object.original_name, self.diff_file_object.final_name, deleted_line_number, revision)
                 # print hint if needed
                 print_revision_line(deletion_revision, previous_revision, False)
+                # do we have the filename?
+                revision_info_fields = filter(None, blame_line[:blame_line.find(')')].split(" "))
+                filename = None
+                if len(revision_info_fields) == 3: # filename is included in output
+                    filename = revision_info_fields[1]
                 if found_real_revision:
                     # got the revision where the line was deleted... let's show it
-                    print_deleted_revision_info(deletion_revision)
+                    print_deleted_revision_info(deletion_revision, filename)
                 else:
-                    # didn't find the revision where the line was deleted... let's show it with the original revision
-                    print_deleted_revision_info(deletion_revision, original_revision)
+                    # didn't find the revision where the line was deleted... let's show it with the original revision text
+                    print_deleted_revision_info(deletion_revision, filename, original_revision)
                 # line number and content
-                sys.stdout.write(blame_line[blame_line.find(' '):])
+                sys.stdout.write(" " + str(get_line_number_from_deleted_line(blame_line)) + blame_line[blame_line.find(')'):])
                 if OPTIONS['COLOR']:
                     sys.stdout.write(COLOR_RESET)
                 previous_revision = deletion_revision
@@ -279,7 +282,7 @@ def run_git_blame(arguments):
     '''
     Run a git blame command. Will return raw output
     '''
-    args=["blame"]
+    args=["blame", "--no-progress"]
     if len(BLAME_OPTIONS) > 0:
         args.extend(BLAME_OPTIONS)
     args.extend(arguments)
@@ -630,9 +633,11 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
     # One "alleged" last revision with a line has more than one parent? Line was deleted from all parents at the same time?
     return (False, blamed_revision)
 
-def print_deleted_revision_info(revision_id, original_revision = None):
+def print_deleted_revision_info(revision_id, filename, original_revision = None):
     """
     Print revision information for a deleled line
+    
+    if filename is provided, have to include the name of the file
     
     if original_information is provided, that revision will be used on the output for the user to see
         (for example, the real revision of a deletion was not found so using original revision reported)
@@ -646,9 +651,12 @@ def print_deleted_revision_info(revision_id, original_revision = None):
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
     if original_revision is not None:
-        sys.stdout.write("%" + original_revision + info[info.index(' '):])
+        sys.stdout.write("%" + original_revision + ' ')
     else:
-        sys.stdout.write('-' + info)
+        sys.stdout.write('-' + info[:info.index(' ') + 1])
+    if filename is not None:
+        sys.stdout.write(filename + " ")
+    sys.stdout.write(info[info.index(' ') + 1:])
 
 def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2):
     """
