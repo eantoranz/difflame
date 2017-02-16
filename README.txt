@@ -3,32 +3,37 @@ difflame
 Copyright 2017 Edmundo Carmona Antoranz
 Released under the terms of GPLv2
 
-Show the output of diff with the additional information of blame
+Keywords: git diff blame
 
-Example output (from difflame project itself, two revisions apart, using blame
-params to change default output from git blame):
+Show the output of git diff with the additional information of git blame for
+added/removed lines so that it's 'trivial' to find out who did what.
 
-$ difflame.py -bp=-t 3d426842 6e2bfb8f
+Example output (from difflame project itself, two revisions apart):
+
+$ ./difflame.py c4dae4fdd8ba883 97d230ce523
 diff --git a/difflame.py b/difflame.py
-index f6e879b..e3a2b65 100755
+index ff65112..ec21fcd 100755
 --- a/difflame.py
 +++ b/difflame.py
-@@ -38,10 +38,10 @@ def get_blame_info_hunk(treeish, file_name, hunk_position, treeish2=None):
- 73dcdd5d (Edmundo 1484713110 -0600  38)         starting_line*=-1
- f22b4b2b (Edmundo 1484711061 -0600  39)     ending_line=starting_line+int(hunk_position[1])-1
- 73dcdd5d (Edmundo 1484713110 -0600  40)     if treeish2 == None:
-        6e2bfb8 use --no-progress on blame
--6e2bfb8 (Edmundo 2017-01-17 22:51:19 -060  41)         return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
-+6e2bfb8f (Edmundo 1484715079 -0600  41)         return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), treeish, "--", file_name])
- 73dcdd5d (Edmundo 1484713110 -0600  42)     else:
- 73dcdd5d (Edmundo 1484713110 -0600  43)         # reverse blame
-        6e2bfb8 use --no-progress on blame
--6e2bfb8 (Edmundo 2017-01-17 22:51:19 -060  44)         return run_git_command(["blame", "--quiet", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
-+6e2bfb8f (Edmundo 1484715079 -0600  44)         return run_git_command(["blame", "--no-progress", "-L", str(starting_line) + "," + str(ending_line), "--reverse", treeish2 + ".." + treeish, "--", file_name])
- f22b4b2b (Edmundo 1484711061 -0600  45) 
- f22b4b2b (Edmundo 1484711061 -0600  46) def process_hunk_from_diff_output(output_lines, starting_line, original_name, final_name, treeish1, treeish2):
- e621c863 (Edmundo 1484708773 -0600  47)     """
-@@ -112,16 +112,20 @@ def process_file_from_diff_output(output_lines, starting_line):
+@@ -51,7 +51,7 @@ REVISIONS_INFO_CACHE=dict()
+ 9d2e8d43 (Edmundo 2017-02-02 22:11:09 -0600  51) 
+ 18ecda88 (Edmundo 2017-02-15 00:42:18 -0600  52) '''
+ cb526767 (Edmundo 2017-02-15 01:01:06 -0600  53) caches to save:
+        cd789a5 removing an unnecessary TODO
+-cd789a5 (Edmundo 2017-02-15 01:10:15 -0600 54)     - reverse blamed files # TODO consider cleaning this when we finish processing a file
++cd789a51 (Edmundo 2017-02-15 01:10:15 -0600  54)     - reverse blamed files
+ cb526767 (Edmundo 2017-02-15 01:01:06 -0600  55)     - diff of files when analyzing revisions (merges and so on)
+ cb526767 (Edmundo 2017-02-15 01:01:06 -0600  56) 
+ 18ecda88 (Edmundo 2017-02-15 00:42:18 -0600  57) BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
+@@ -120,7 +120,7 @@ class DiffFileObject:
+ d75f61ea (Edmundo 2017-02-11 16:28:58 -0600 120)             file_name = file_name[2:]
+ d75f61ea (Edmundo 2017-02-11 16:28:58 -0600 121)         
+ d75f61ea (Edmundo 2017-02-11 16:28:58 -0600 122)         # starting to build git command arguments
+        97d230c Print filenames appropiately on deleted lines
+-97d230c (Edmundo 2017-02-15 19:51:46 -0600 123)         git_blame_opts=["blame", "--no-progress"]
++97d230ce (Edmundo 2017-02-15 19:51:46 -0600 123)         git_blame_opts = []
+ d75f61ea (Edmundo 2017-02-11 16:28:58 -0600 124)         
+ d75f61ea (Edmundo 2017-02-11 16:28:58 -0600 125)         for hunk_position in hunk_positions:
 
 
 OUTPUT FORMAT
@@ -39,6 +44,11 @@ When it's not possible to pinpoint the revision where it was deleted, the last
 revision where that line was present is reported instead (as reported by
 git blame --reverse). When this happens, a percentage sign (%) will be used as
 the prefix of the deleted line (instead of the usual -).
+
+Notice how a 'hint' line is printed for lines that are removed/added and that
+relate to the same revision. This is so that it's possible to get a little more
+information about the revision itself without having to resort to an additional
+call to git show.
 
 You can provide one or two treeishs. If you provide only one, HEAD will be
 assumed to be the second treeish.
@@ -65,11 +75,13 @@ options:
         
     -w: skip space changes (in both diff and blame)
     
-    --no-hints: when printing added lines, do not provide the hint (one-line summary of the revision)
-        before the lines themselves.
-        if a number of added lines belong to the same revision one after the other, a single
-        hint line would be printed before them.
-        It would have looked something like this with hints enabled (taken from git project):
+    --no-hints: when printing added/removed lines, do not provide the hint
+        (one-line summary of the revision) before the lines themselves.
+        If a number of added/removed lines belong to the same revision one
+        after the other, a single hint line would be printed before them.
+        It would have looked something like this with hints disabled (taken
+        from git project):
+
             diff --git a/fast-import.c b/fast-import.c
             index f561ba833..64fe602f0 100644
             --- a/fast-import.c
@@ -79,7 +91,6 @@ options:
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2219)              unsigned char fanout)
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2220) {
             -02d0457eb4 (Junio C Hamano 2017-01-10 15:24:26 -0800 2221)     struct tree_content *t = root->tree;
-                    405d7f4af fast-import: properly fanout notes when tree is imported
             +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2221)      struct tree_content *t;
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2222)      struct tree_entry *e, leaf;
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2223)      unsigned int i, tmp_hex_sha1_len, tmp_fullpath_len;
@@ -87,7 +98,6 @@ options:
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2225)      unsigned char sha1[20];
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2226)      char realpath[60];
              2a113aee9b (Johan Herland 2009-12-07 12:27:24 +0100 2227) 
-                    405d7f4af fast-import: properly fanout notes when tree is imported
             +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2228)      if (!root->tree)
             +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2229)              load_tree(root);
             +405d7f4af6 (Mike Hommey   2016-12-21 06:04:48 +0900 2230)      t = root->tree;
@@ -98,5 +108,5 @@ options:
 
     --git-debug
         print debug information about git on stderr:
-            - executed commands
+            - executed commands (with total execution time in miliseconds)
             - total commands run
