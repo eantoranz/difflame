@@ -572,6 +572,47 @@ def get_reverse_blamed_line(original_revision, final_revision, filename, deleted
         # will get content for blamed file
         BLAMED_FILES_CACHE[original_revision][final_revision][filename] = run_git_blame(["--reverse", "-s", original_revision + ".." + final_revision, "--", filename]).split("\n")
     return BLAMED_FILES_CACHE[original_revision][final_revision][filename][deleted_line_number -1]
+
+def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_number):
+    '''
+    Manually find the revision in the history of treeish2 where the line reported was deleted (in relation to treeish1)
+    This will be called when treeish1 is _not_ part of the history of treeish2
+    
+    If a revision could not be found, will return None (for recursion purposes)
+    '''
+    # find _all_ revisions that are part of treeish2 that are not part of the history of treeish1
+    if get_line_in_revision(treeish1, treeish2, original_filename, deleted_line_number) is not None:
+        raise Exception("This is a Bug: Line is _not_ deleted on treeish2")
+    revisions_treeish2=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2]).split("\n")
+    # TODO find the name of the file on treeish2
+    revisions_for_file=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", original_filename]).split("\n")
+    while True:
+        revision=revisions_for_file[0]
+        if len(revision) == 0:
+            # empty
+            break
+        '''
+        on revision, the line must be _gone_.
+        If it is _not_ gone, then the deleting revision was on a previous (recursive call)
+        '''
+        if get_line_in_revision(treeish1, revision, original_filename, deleted_line_number) is not None:
+            #Line is not deleted on this revision.... returning None
+            return None
+        # if in all parents (that are _not_ part of treeish1) the line is gone, then we found the revision where it was deleted
+        for parent in get_parent_revisions(revision):
+            if parent not in revisions_treeish2:
+                #Parent is in the history of treeish1, discarding for analysis
+                continue
+            if get_line_in_revision(treeish1, parent, original_filename, deleted_line_number) is None:
+                #Line is _not_ included in this parent.... problem is deeper in history
+                result = process_deleted_by_step(treeish1, parent, original_filename, deleted_line_number)
+                if result is not None:
+                    return result
+                return revision
+        # if we reached this point, we ran out of parents... this is the culprit revision
+        return revision
+    # no revisions so.... have to return treeish2 as the probable point where it broke
+    return None
     
 def process_deleted_line(treeish1, treeish2, original_filename, final_filename, deleted_line_number, blamed_revision):
     """
@@ -593,6 +634,11 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
             Otherwise, will return the blamed revision
     """
     # let's find all revisions that are connected to this revisions starting from top_revision
+    # if treeish1 is not part of the history of treeish2, can't trust blame --reverse
+    merge_base = run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+    if merge_base != treeish1:
+        #Treeish1 is not part of the history of treeish2, have to go 'manual'
+        return (True, process_deleted_by_step(treeish1, treeish2, cleanup_filename(final_filename), deleted_line_number))
     children=revisions_pointing_to(treeish1, treeish2, blamed_revision)
     if len(children) == 0:
         # let's return blamed revision
