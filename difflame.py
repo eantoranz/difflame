@@ -53,6 +53,7 @@ REVISIONS_INFO_CACHE=dict()
 caches to save:
     - reverse blamed files
     - diff of files when analyzing revisions (merges and so on)
+    - merge bases
 
 BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
 use get_reverse_blamed_line()
@@ -60,10 +61,14 @@ use get_reverse_blamed_line()
 DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
 use get_line_in_revision()
 
+MERGE_BASE[treeish1][treeish2]=revision
+use get_merge_base
+
 filename is as it shows up on final_revision
 '''
 BLAMED_FILES_CACHE = None
 DIFF_FILES_CACHE = None
+MERGE_BASE = dict()
 
 class DiffFileObject:
     '''
@@ -320,6 +325,16 @@ def get_full_revision_id(revision):
     full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
+
+def get_merge_base(treeish1, treeish2):
+    if treeish1 not in MERGE_BASE:
+        if treeish2 in MERGE_BASE:
+            return get_merge_base(treeish2, treeish1) # treeish2 has already been used as a key.... revert call
+        MERGE_BASE[treeish1] = dict()
+    if treeish2 not in MERGE_BASE[treeish1]:
+        merge_base = run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+        MERGE_BASE[treeish1][treeish2] = merge_base
+    return MERGE_BASE[treeish1][treeish2]
 
 def cleanup_filename(filename):
     '''
@@ -635,7 +650,7 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
     """
     # let's find all revisions that are connected to this revisions starting from top_revision
     # if treeish1 is not part of the history of treeish2, can't trust blame --reverse
-    merge_base = run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+    merge_base = get_merge_base(treeish1, treeish2)
     if merge_base != treeish1:
         #Treeish1 is not part of the history of treeish2, have to go 'manual'
         return (True, process_deleted_by_step(treeish1, treeish2, cleanup_filename(final_filename), deleted_line_number))
