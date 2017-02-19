@@ -240,7 +240,7 @@ class DiffHunk:
                 revision = get_revision_from_modified_line(blame_line)
                 original_revision = revision # so that we can print the exact text later on if needed
                 revision=get_full_revision_id(revision)
-                (found_real_revision, deletion_revision) = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, self.diff_file_object.original_name, self.diff_file_object.final_name, deleted_line_number, revision)
+                deletion_revision = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
                 # print hint if needed
                 print_revision_line(deletion_revision, previous_revision, False)
                 # do we have the filename?
@@ -248,12 +248,8 @@ class DiffHunk:
                 filename = None
                 if len(revision_info_fields) == 3: # filename is included in output
                     filename = revision_info_fields[1]
-                if found_real_revision:
-                    # got the revision where the line was deleted... let's show it
-                    print_deleted_revision_info(deletion_revision, filename)
-                else:
-                    # didn't find the revision where the line was deleted... let's show it with the original revision text
-                    print_deleted_revision_info(deletion_revision, filename, original_revision)
+                # got the revision where the line was deleted... let's show it
+                print_deleted_revision_info(deletion_revision, filename)
                 # line number and content
                 sys.stdout.write(" " + str(get_line_number_from_deleted_line(blame_line)) + blame_line[blame_line.find(')'):])
                 if OPTIONS['COLOR']:
@@ -560,33 +556,6 @@ def get_line_in_revision(original_revision, final_revision, filename, line_numbe
     # If we reached this point, the line survived
     return line_number + line_diff
 
-def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_number, merge_revision, parents):
-    '''
-    Find the _parent_ from which a deleted line came from
-    
-    - In order to find the "deleting" revision, will check for the line of file on each parent against the original line number
-      If the line number on a given parent is None, it means the line was deleted
-    '''
-    original_filename = cleanup_filename(original_filename)
-    # will do a diff between the parent and treeish1 and will try to see in which revision the line was deleted
-    best_revision = None # where we will hold the best revision so far # TODO not using it, going through the first node
-    for parent in parents:
-        line_number=get_line_in_revision(treeish1, parent, original_filename, deleted_line_number)
-        if line_number is None:
-            # line is not present on this parent
-            # was it ever part of the branch?
-            '''
-            when doing a blame --reverse against the parent, if the revision is shown as treeish1
-            then the code was _never_ a part of the history of this parent, so this parent is not to be blamed
-            '''
-            blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
-            if blamed_revision != treeish1:
-                # line was (at some point) part of the history of this parent
-                return parent
-        # line did exist on this parent.... we can go to next parent
-    # If we reached this point, we couldn't find a revision where it was deleted
-    return None
-
 def find_file_line_on_revision(treeish2, filename, line_number, revision):
     '''
     Find the corresponding line on 'revision' for a file that at treeish2 had a defined line number
@@ -611,7 +580,7 @@ def get_reverse_blamed_line(original_revision, final_revision, filename, deleted
         BLAMED_FILES_CACHE[original_revision][final_revision][filename] = run_git_blame(["--reverse", "-s", original_revision + ".." + final_revision, "--", filename]).split("\n")
     return BLAMED_FILES_CACHE[original_revision][final_revision][filename][deleted_line_number -1]
 
-def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_number):
+def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_number):
     '''
     Manually find the revision in the history of treeish2 where the line reported was deleted (in relation to treeish1)
     This will be called when treeish1 is _not_ part of the history of treeish2
@@ -653,7 +622,7 @@ def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_
                 if blamed_revision != treeish1:
                     continue
                 # the line was (at some point) part of the history of this parent
-                result = process_deleted_by_step(treeish1, parent, original_filename, deleted_line_number)
+                result = process_deleted_line(treeish1, parent, original_filename, deleted_line_number)
                 if result is not None:
                     return result
         # if we reached this point, we ran out of parents... this is the culprit revision
@@ -661,27 +630,6 @@ def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_
     # no revisions so.... have to return treeish2 as the probable point where it broke
     return None
     
-def process_deleted_line(treeish1, treeish2, original_filename, final_filename, deleted_line_number, blamed_revision):
-    """
-    Given a line that was deleted, let's find out the revision where it was actually deleted and not its parent (full ID)
-    
-    - treeish1 and treeish2 are the 2 revisions that encompas the whole analysis
-    - original_filename is the name of the file on treeish1
-    - final_filename is the name of the file on treeish2
-    - deleted_line_number is the number of the deleted line on treeish1
-    - blamed_revision is the revision that is being asked to analyze to find the "real" revision where the line was deleted
-        On the first call, it should be the revision as reported on the blamed line
-        On recursive calls (if needed) it should be a different path (modifying treeish2) in order to find the real revision
-            where the line was deleted
-    
-    Will return a tuple:
-        -   deletion revision was found
-        -   full id of the revision
-            If the revision was found, will return full id of the "real" deletion revision
-            Otherwise, will return the blamed revision
-    """
-    return (True, process_deleted_by_step(treeish1, treeish2, cleanup_filename(final_filename), deleted_line_number))
-
 def print_deleted_revision_info(revision_id, filename, original_revision = None):
     """
     Print revision information for a deleled line
