@@ -41,8 +41,6 @@ HINTS=None
 # association between shortened revision IDs and their real full IDs
 REVISIONS_CACHE=dict()
 
-# direct child nodes of each revision
-CHILD_REVISIONS_CACHE=dict()
 # direct parent nodes of each revision
 PARENT_REVISIONS_CACHE=dict() # TODO does it have to be calculated depending on the path that is being analyzed?
 
@@ -55,23 +53,15 @@ caches to save:
     - diff of files when analyzing revisions (merges and so on)
     - merge bases
 
-BLAMED_FILES_CACHE[originating_revision][final_revision][filename] = lines
-use get_reverse_blamed_line()
-
 DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
 use get_line_in_revision()
-
-MERGE_BASE[treeish1][treeish2]=revision
-use get_merge_base()
 
 REVISIONS_CACHE[treeish1][treeish2]
 use get_revisions()
 
 filename is as it shows up on final_revision
 '''
-BLAMED_FILES_CACHE = None
 DIFF_FILES_CACHE = None
-MERGE_BASE = dict()
 REVISIONS_CACHE = dict()
 
 class DiffFileObject:
@@ -343,16 +333,6 @@ def get_revisions(treeish1, treeish2, filename = None):
         REVISIONS_CACHE[treeish1][treeish2][filename] = filter(None, output.split("\n"))
     return REVISIONS_CACHE[treeish1][treeish2][filename]
 
-def get_merge_base(treeish1, treeish2):
-    if treeish1 not in MERGE_BASE:
-        if treeish2 in MERGE_BASE:
-            return get_merge_base(treeish2, treeish1) # treeish2 has already been used as a key.... revert call
-        MERGE_BASE[treeish1] = dict()
-    if treeish2 not in MERGE_BASE[treeish1]:
-        merge_base = run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
-        MERGE_BASE[treeish1][treeish2] = merge_base
-    return MERGE_BASE[treeish1][treeish2]
-
 def cleanup_filename(filename):
     '''
     Removing prepending a/ or b/ if present
@@ -450,33 +430,6 @@ def print_revision_line(current_revision, previous_revision, adding_line):
     
     return current_revision
 
-def revisions_pointing_to(original_revision, final_revision, target_revision):
-    """
-    Find revisions that point to target_revision between original_revision..final_revision
-    """
-    if original_revision not in CHILD_REVISIONS_CACHE:
-        CHILD_REVISIONS_CACHE[original_revision] = dict()
-    if final_revision not in CHILD_REVISIONS_CACHE[original_revision]:
-        CHILD_REVISIONS_CACHE[original_revision][final_revision] = dict()
-        git_output=run_git_command(["log", "--pretty=%H%n%P", original_revision + ".." + final_revision]).split("\n")[:-1]
-        i=0
-        children=[]
-        while i < len(git_output):
-            revision=git_output[i]
-            parents = git_output[i+1].split(" ")
-            if revision not in PARENT_REVISIONS_CACHE:
-                # let's add all thes parents cause we don't have them
-                PARENT_REVISIONS_CACHE[revision] = parents
-            for parent in parents:
-                if parent not in CHILD_REVISIONS_CACHE[original_revision][final_revision]:
-                    CHILD_REVISIONS_CACHE[original_revision][final_revision][parent] = []
-                CHILD_REVISIONS_CACHE[original_revision][final_revision][parent].append(revision)
-            i+=2
-    if target_revision not in CHILD_REVISIONS_CACHE[original_revision][final_revision]:
-        # no children
-        return []
-    return CHILD_REVISIONS_CACHE[original_revision][final_revision][target_revision]
-
 def get_parent_revisions(revision):
     """
     Find the parent revisions of a given revision
@@ -561,30 +514,6 @@ def get_line_in_revision(original_revision, final_revision, filename, line_numbe
         line_diff=hunk.final_file_ending_line - hunk.original_file_ending_line
     # If we reached this point, the line survived
     return line_number + line_diff
-
-def find_file_line_on_revision(treeish2, filename, line_number, revision):
-    '''
-    Find the corresponding line on 'revision' for a file that at treeish2 had a defined line number
-    
-    If the line is deleted on 'revision', then None will be returned
-    '''
-    diff_output=run_git_diff([treeish2 + ".." + revision, "--", filename])
-    # TODO complete this in order to be able to handle renames
-
-def get_reverse_blamed_line(original_revision, final_revision, filename, deleted_line_number):
-    '''
-    Get the desired blame line from reverse blame
-    
-    - filename is the name of the file on the final_revision
-    '''
-    if original_revision not in BLAMED_FILES_CACHE:
-        BLAMED_FILES_CACHE[original_revision]=dict()
-    if final_revision not in BLAMED_FILES_CACHE[original_revision]:
-        BLAMED_FILES_CACHE[original_revision][final_revision]=dict()
-    if filename not in BLAMED_FILES_CACHE[original_revision][final_revision]:
-        # will get content for blamed file
-        BLAMED_FILES_CACHE[original_revision][final_revision][filename] = run_git_blame(["--reverse", "-s", original_revision + ".." + final_revision, "--", filename]).split("\n")
-    return BLAMED_FILES_CACHE[original_revision][final_revision][filename][deleted_line_number -1]
 
 def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_number):
     '''
