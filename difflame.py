@@ -532,37 +532,34 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
     revisions_for_file=get_revisions(treeish1, treeish2, original_filename)
     if len(revisions_for_file) == 0:
         return None
-    while True:
-        revision=revisions_for_file[0]
-        '''
-        on revision, the line must be _gone_.
-        If it is _not_ gone, then the deleting revision was on a previous (recursive call)
-        '''
-        if get_line_in_revision(treeish1, revision, original_filename, deleted_line_number) is not None:
-            #Line is not deleted on this revision.... returning None
-            return None
-        # if in all parents (that are _not_ part of treeish1) the line is gone, then we found the revision where it was deleted
-        for parent in get_parent_revisions(revision):
-            if parent not in revisions_treeish2:
-                #Parent is in the history of treeish1, discarding for analysis
+    revision=revisions_for_file[0]
+    '''
+    on revision, the line must be _gone_.
+    If it is _not_ gone, then the deleting revision was on a previous (recursive call)
+    '''
+    if get_line_in_revision(treeish1, revision, original_filename, deleted_line_number) is not None:
+        #Line is not deleted on this revision.... returning None
+        return None
+    # if in all parents (that are _not_ part of treeish1) the line is gone, then we found the revision where it was deleted
+    for parent in get_parent_revisions(revision):
+        if parent not in revisions_treeish2:
+            #Parent is in the history of treeish1, discarding for analysis
+            continue
+        if get_line_in_revision(treeish1, parent, original_filename, deleted_line_number) is None:
+            #Line is _not_ included in this parent
+            '''
+            when doing a blame --reverse against the parent, if the revision is shown as treeish1
+            then the code was _never_ a part of the history of this parent, so this parent is _not_ to be blamed
+            '''
+            blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
+            if blamed_revision != treeish1:
                 continue
-            if get_line_in_revision(treeish1, parent, original_filename, deleted_line_number) is None:
-                #Line is _not_ included in this parent
-                '''
-                when doing a blame --reverse against the parent, if the revision is shown as treeish1
-                then the code was _never_ a part of the history of this parent, so this parent is _not_ to be blamed
-                '''
-                blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
-                if blamed_revision != treeish1:
-                    continue
-                # the line was (at some point) part of the history of this parent
-                result = process_deleted_line(treeish1, parent, original_filename, deleted_line_number)
-                if result is not None:
-                    return result
-        # if we reached this point, we ran out of parents... this is the culprit revision
-        return revision
-    # no revisions so.... have to return treeish2 as the probable point where it broke
-    return None
+            # the line was (at some point) part of the history of this parent
+            result = process_deleted_line(treeish1, parent, original_filename, deleted_line_number)
+            if result is not None:
+                return result
+    # if we reached this point, we ran out of parents... this is the culprit revision
+    return revision
     
 def print_deleted_revision_info(revision_id, filename, original_revision = None):
     """
