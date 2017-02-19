@@ -62,13 +62,17 @@ DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_obj
 use get_line_in_revision()
 
 MERGE_BASE[treeish1][treeish2]=revision
-use get_merge_base
+use get_merge_base()
+
+REVISIONS_CACHE[treeish1][treeish2]
+use get_revisions()
 
 filename is as it shows up on final_revision
 '''
 BLAMED_FILES_CACHE = None
 DIFF_FILES_CACHE = None
 MERGE_BASE = dict()
+REVISIONS_CACHE = dict()
 
 class DiffFileObject:
     '''
@@ -325,6 +329,17 @@ def get_full_revision_id(revision):
     full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
+
+def get_revisions(treeish1, treeish2):
+    '''
+    get the list of revisions that are part of treeish2
+    and that _do not_ belong to treeish1
+    '''
+    if treeish1 not in REVISIONS_CACHE:
+        REVISIONS_CACHE[treeish1] = dict()
+    if treeish2 not in REVISIONS_CACHE[treeish1]:
+        REVISIONS_CACHE[treeish1][treeish2]=filter(None, run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2]).split("\n"))
+    return REVISIONS_CACHE[treeish1][treeish2]
 
 def get_merge_base(treeish1, treeish2):
     if treeish1 not in MERGE_BASE:
@@ -602,11 +617,13 @@ def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_
     This will be called when treeish1 is _not_ part of the history of treeish2
     
     If a revision could not be found, will return None (for recursion purposes)
+    
+    revisions_treeish2 are the revisions that are exclusive for treeish2 (not present in the history of treeish1)
     '''
     # find _all_ revisions that are part of treeish2 that are not part of the history of treeish1
     if get_line_in_revision(treeish1, treeish2, original_filename, deleted_line_number) is not None:
         raise Exception("This is a Bug: Line is _not_ deleted on treeish2")
-    revisions_treeish2=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2]).split("\n")
+    revisions_treeish2=get_revisions(treeish1, treeish2)
     # TODO find the name of the file on treeish2
     revisions_for_file=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", original_filename]).split("\n")
     while True:
