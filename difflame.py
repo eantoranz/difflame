@@ -558,8 +558,16 @@ def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_nu
     for parent in parents:
         line_number=get_line_in_revision(treeish1, parent, original_filename, deleted_line_number)
         if line_number is None:
-            # line was deleted coming from this parent... no need to go further
-            return parent
+            # line is not present coming from this parent
+            # was it ever part of the branch?
+            '''
+            if when doing a blame --reverse against the parent, if the revision is shown as treeish1
+            then the code was _never_ a part of the history of this parent, so this parent is not to be blamed
+            '''
+            blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
+            if blamed_revision != treeish1:
+                return parent
+            # this is not the deleting parent
         # line did exist on this parent.... we can go to next parent
     # If we reached this point, we couldn't find a revision where it was deleted
     return None
