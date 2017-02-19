@@ -558,16 +558,16 @@ def find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_nu
     for parent in parents:
         line_number=get_line_in_revision(treeish1, parent, original_filename, deleted_line_number)
         if line_number is None:
-            # line is not present coming from this parent
+            # line is not present on this parent
             # was it ever part of the branch?
             '''
-            if when doing a blame --reverse against the parent, if the revision is shown as treeish1
+            when doing a blame --reverse against the parent, if the revision is shown as treeish1
             then the code was _never_ a part of the history of this parent, so this parent is not to be blamed
             '''
             blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
             if blamed_revision != treeish1:
+                # line was (at some point) part of the history of this parent
                 return parent
-            # this is not the deleting parent
         # line did exist on this parent.... we can go to next parent
     # If we reached this point, we couldn't find a revision where it was deleted
     return None
@@ -627,11 +627,18 @@ def process_deleted_by_step(treeish1, treeish2, original_filename, deleted_line_
                 #Parent is in the history of treeish1, discarding for analysis
                 continue
             if get_line_in_revision(treeish1, parent, original_filename, deleted_line_number) is None:
-                #Line is _not_ included in this parent.... problem is deeper in history
+                #Line is _not_ included in this parent
+                '''
+                when doing a blame --reverse against the parent, if the revision is shown as treeish1
+                then the code was _never_ a part of the history of this parent, so this parent is _not_ to be blamed
+                '''
+                blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
+                if blamed_revision != treeish1:
+                    continue
+                # the line was (at some point) part of the history of this parent
                 result = process_deleted_by_step(treeish1, parent, original_filename, deleted_line_number)
                 if result is not None:
                     return result
-                return revision
         # if we reached this point, we ran out of parents... this is the culprit revision
         return revision
     # no revisions so.... have to return treeish2 as the probable point where it broke
