@@ -663,51 +663,7 @@ def process_deleted_line(treeish1, treeish2, original_filename, final_filename, 
             If the revision was found, will return full id of the "real" deletion revision
             Otherwise, will return the blamed revision
     """
-    # let's find all revisions that are connected to this revisions starting from top_revision
-    # if treeish1 is not part of the history of treeish2, can't trust blame --reverse
-    merge_base = get_merge_base(treeish1, treeish2)
-    if merge_base != treeish1:
-        #Treeish1 is not part of the history of treeish2, have to go 'manual'
-        return (True, process_deleted_by_step(treeish1, treeish2, cleanup_filename(final_filename), deleted_line_number))
-    children=revisions_pointing_to(treeish1, treeish2, blamed_revision)
-    if len(children) == 0:
-        # let's return blamed revision
-        return (False, blamed_revision)
-    if len(children) == 1:
-        blamed_revision = children[0]
-        parents = get_parent_revisions(blamed_revision)
-        if len(parents) == 1:
-            # doesn't look like a merge, found the culprit
-            return (True, blamed_revision)
-        '''
-        if the 'alleged' revision is a merge revision, the 'real' revision that removed that line
-        might be on another parent branch of the parent revision
-        '''
-        deleting_parent = find_deleting_parent_from_merge(treeish1, original_filename, deleted_line_number, blamed_revision, parents)
-        if deleting_parent is None:
-            # the deletion of the line happened at the merge revision itself, not any of the parents
-            return (True, blamed_revision)
-        else:
-            # let's make a recursive analysis of blame to see what is the "new" blamed revision if we start from here
-            line = get_reverse_blamed_line(treeish1, deleting_parent, cleanup_filename(final_filename), deleted_line_number)
-            #line = run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + deleting_parent, "--", ) # TODO have to use the name of the file on the deleting_parent
-            new_blamed_revision = get_full_revision_id(line.split(" ")[0])
-            '''
-            need to process this result further
-            Let's find out where the line was deleted between these two revisions:
-                1 - merge-base of original_revision and deleting_parent
-                2 - deleting_parent
-            '''
-            # let's try to do it recursively now that the path has been "shortened"
-            (found_revision, blamed_revision) = process_deleted_line(treeish1, deleting_parent, original_filename, final_filename, deleted_line_number, new_blamed_revision)
-            if blamed_revision == new_blamed_revision:
-                # merge analysis was not able to move forward from this new position
-                return (True, deleting_parent)
-            else:
-                # there was some progress
-                return (True, blamed_revision)
-    # One "alleged" last revision with a line has more than one parent? Line was deleted from all parents at the same time?
-    return (False, blamed_revision)
+    return (True, process_deleted_by_step(treeish1, treeish2, cleanup_filename(final_filename), deleted_line_number))
 
 def print_deleted_revision_info(revision_id, filename, original_revision = None):
     """
