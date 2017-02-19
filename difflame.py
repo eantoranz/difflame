@@ -546,15 +546,7 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
             #Parent is in the history of treeish1, discarding for analysis
             continue
         if get_line_in_revision(treeish1, parent, original_filename, deleted_line_number) is None:
-            #Line is _not_ included in this parent
-            '''
-            when doing a blame --reverse against the parent, if the revision is shown as treeish1
-            then the code was _never_ a part of the history of this parent, so this parent is _not_ to be blamed
-            '''
-            blamed_revision=get_full_revision_id(run_git_blame(["--reverse", "-s", "-L" + str(deleted_line_number) + "," + str(deleted_line_number), treeish1 + ".." + parent, "--", original_filename]).split()[0])
-            if blamed_revision != treeish1:
-                continue
-            # the line was (at some point) part of the history of this parent
+            #Line is _not_ included in this parent... going into this parent
             result = process_deleted_line(treeish1, parent, original_filename, deleted_line_number)
             if result is not None:
                 return result
