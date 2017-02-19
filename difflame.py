@@ -326,7 +326,7 @@ def get_full_revision_id(revision):
     REVISIONS_CACHE[revision] = full_revision
     return full_revision
 
-def get_revisions(treeish1, treeish2):
+def get_revisions(treeish1, treeish2, filename = None):
     '''
     get the list of revisions that are part of treeish2
     and that _do not_ belong to treeish1
@@ -334,8 +334,14 @@ def get_revisions(treeish1, treeish2):
     if treeish1 not in REVISIONS_CACHE:
         REVISIONS_CACHE[treeish1] = dict()
     if treeish2 not in REVISIONS_CACHE[treeish1]:
-        REVISIONS_CACHE[treeish1][treeish2]=filter(None, run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2]).split("\n"))
-    return REVISIONS_CACHE[treeish1][treeish2]
+        REVISIONS_CACHE[treeish1][treeish2] = dict()
+    if filename not in REVISIONS_CACHE[treeish1][treeish2]:
+        if filename is None:
+            output=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2])
+        else:
+            output=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", filename])
+        REVISIONS_CACHE[treeish1][treeish2][filename] = filter(None, output.split("\n"))
+    return REVISIONS_CACHE[treeish1][treeish2][filename]
 
 def get_merge_base(treeish1, treeish2):
     if treeish1 not in MERGE_BASE:
@@ -594,12 +600,11 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
         raise Exception("This is a Bug: Line is _not_ deleted on treeish2")
     revisions_treeish2=get_revisions(treeish1, treeish2)
     # TODO find the name of the file on treeish2
-    revisions_for_file=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", original_filename]).split("\n")
+    revisions_for_file=get_revisions(treeish1, treeish2, original_filename)
+    if len(revisions_for_file) == 0:
+        return None
     while True:
         revision=revisions_for_file[0]
-        if len(revision) == 0:
-            # empty
-            break
         '''
         on revision, the line must be _gone_.
         If it is _not_ gone, then the deleting revision was on a previous (recursive call)
