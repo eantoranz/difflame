@@ -525,8 +525,6 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
     revisions_treeish2 are the revisions that are exclusive for treeish2 (not present in the history of treeish1)
     '''
     # find _all_ revisions that are part of treeish2 that are not part of the history of treeish1
-    if get_line_in_revision(treeish1, treeish2, original_filename, deleted_line_number) is not None:
-        raise Exception("This is a Bug: Line is _not_ deleted on treeish2")
     revisions_treeish2=get_revisions(treeish1, treeish2)
     # TODO find the name of the file on treeish2
     revisions_for_file=get_revisions(treeish1, treeish2, original_filename)
