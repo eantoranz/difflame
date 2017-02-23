@@ -155,9 +155,13 @@ class DiffFileObject:
         '''
         #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
         i=0
-        while i < len(self.raw_content) and self.raw_content[i][0] != '@':
+        while i < len(self.raw_content) and len(self.raw_content[i]) and self.raw_content[i][0] != '@':
             print self.raw_content[i]
             i+=1
+        
+        if len(self.hunks) == 0:
+            # no hunks.... binary file probably
+            return
         
         # print hunks
         original_file_blame = self.getOriginalFileBlame()
