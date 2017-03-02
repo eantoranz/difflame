@@ -241,19 +241,28 @@ class DiffHunk:
                 revision=get_full_revision_id(revision)
                 deletion_revision = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
                 # print hint if needed
-                print_revision_line(deletion_revision, previous_revision, False)
+                if deletion_revision is None:
+                    print_revision_line(revision, previous_revision, False)
+                else:
+                    print_revision_line(deletion_revision, previous_revision, False)
                 # do we have the filename?
                 revision_info_fields = filter(None, blame_line[:blame_line.find(')')].split(" "))
                 filename = None
                 if len(revision_info_fields) == 3: # filename is included in output
                     filename = revision_info_fields[1]
                 # got the revision where the line was deleted... let's show it
-                print_deleted_revision_info(deletion_revision, filename)
+                if deletion_revision is None:
+                    print_deleted_revision_info(revision, filename, False)
+                else:
+                    print_deleted_revision_info(deletion_revision, filename)
                 # line number and content
                 sys.stdout.write(" " + str(get_line_number_from_deleted_line(blame_line)) + blame_line[blame_line.find(')'):])
                 if OPTIONS['COLOR']:
                     sys.stdout.write(COLOR_RESET)
-                previous_revision = deletion_revision
+                if deletion_revision is None:
+                    previous_revision = revision
+                else:
+                    previous_revision = deletion_revision
                 print ""
             elif line[0]=='\\':
                 # print original line, nothing is added
@@ -560,14 +569,13 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
     # if we reached this point, we ran out of parents... this is the culprit revision
     return revision
     
-def print_deleted_revision_info(revision_id, filename, original_revision = None):
+def print_deleted_revision_info(revision_id, filename, found_revision = True):
     """
     Print revision information for a deleled line
     
     if filename is provided, have to include the name of the file
     
-    if original_information is provided, that revision will be used on the output for the user to see
-        (for example, the real revision of a deletion was not found so using original revision reported)
+    if _not_ found_revision then revision is taken from blame --reverse
     """
     info = None
     if revision_id in REVISIONS_INFO_CACHE:
@@ -577,10 +585,11 @@ def print_deleted_revision_info(revision_id, filename, original_revision = None)
         REVISIONS_INFO_CACHE[revision_id] = info
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RED)
-    if original_revision is not None:
-        sys.stdout.write("%" + original_revision + ' ')
+    if found_revision:
+        sys.stdout.write("-")
     else:
-        sys.stdout.write('-' + info[:info.index(' ') + 1])
+        sys.stdout.write("%")
+    sys.stdout.write(info[:info.index(' ') + 1])
     if filename is not None:
         sys.stdout.write(filename + " ")
     sys.stdout.write(info[info.index(' ') + 1:])
