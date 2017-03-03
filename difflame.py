@@ -220,6 +220,12 @@ class DiffHunk:
         """
         print self.raw_content[0] # hunk descrtiptor line
         previous_revision=None
+        if reverse:
+            starting_revision = self.diff_file_object.final_revision
+            target_revision = self.diff_file_object.starting_revision
+        else:
+            starting_revision = self.diff_file_object.starting_revision
+            target_revision = self.diff_file_object.final_revision
         for line in self.raw_content[1:]:
             if line[0] == ' ':
                 # added line (no color) or unchanged line
@@ -257,12 +263,6 @@ class DiffHunk:
                 revision = get_revision_from_modified_line(blame_line)
                 original_revision = revision # so that we can print the exact text later on if needed
                 revision=get_full_revision_id(revision)
-                if reverse:
-                    starting_revision = self.diff_file_object.final_revision
-                    target_revision = self.diff_file_object.starting_revision
-                else:
-                    starting_revision = self.diff_file_object.starting_revision
-                    target_revision = self.diff_file_object.final_revision
                 deletion_revision = process_deleted_line(starting_revision, target_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
                 # print hint if needed
                 if deletion_revision is None:
