@@ -257,7 +257,13 @@ class DiffHunk:
                 revision = get_revision_from_modified_line(blame_line)
                 original_revision = revision # so that we can print the exact text later on if needed
                 revision=get_full_revision_id(revision)
-                deletion_revision = process_deleted_line(self.diff_file_object.starting_revision, self.diff_file_object.final_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number, reverse)
+                if reverse:
+                    starting_revision = self.diff_file_object.final_revision
+                    target_revision = self.diff_file_object.starting_revision
+                else:
+                    starting_revision = self.diff_file_object.starting_revision
+                    target_revision = self.diff_file_object.final_revision
+                deletion_revision = process_deleted_line(starting_revision, target_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
                 # print hint if needed
                 if deletion_revision is None:
                     print_revision_line(revision, previous_revision, False)
@@ -551,7 +557,7 @@ def get_line_in_revision(original_revision, final_revision, filename, line_numbe
     # If we reached this point, the line survived
     return line_number + line_diff
 
-def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_number, reverse):
+def process_deleted_line(starting_revision, target_revision, original_filename, deleted_line_number):
     '''
     Manually find the revision in the history of treeish2 where the line reported was deleted (in relation to treeish1)
     This will be called when treeish1 is _not_ part of the history of treeish2
@@ -561,15 +567,9 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
     revisions_treeish2 are the revisions that are exclusive for treeish2 (not present in the history of treeish1)
     '''
     # find _all_ revisions that are part of "target" revision that are not part of the history of "starting" revision
-    if reverse:
-        revisions_treeish2=get_revisions(treeish2, treeish1)
-    else:
-        revisions_treeish2=get_revisions(treeish1, treeish2)
+    revisions_target=get_revisions(starting_revision, target_revision)
     # TODO find the name of the file on treeish2
-    if reverse:
-        revisions_for_file=get_revisions(treeish2, treeish1, original_filename)
-    else:
-        revisions_for_file=get_revisions(treeish1, treeish2, original_filename)
+    revisions_for_file=get_revisions(starting_revision, target_revision, original_filename)
     if len(revisions_for_file) == 0:
         return None
     revision=revisions_for_file[0]
@@ -577,28 +577,19 @@ def process_deleted_line(treeish1, treeish2, original_filename, deleted_line_num
     on revision, the line must be _gone_.
     If it is _not_ gone, then the deleting revision was on a previous (recursive call)
     '''
-    if reverse:
-        line_in_revision = get_line_in_revision(treeish2, revision, original_filename, deleted_line_number)
-    else:
-        line_in_revision = get_line_in_revision(treeish1, revision, original_filename, deleted_line_number)
+    line_in_revision = get_line_in_revision(starting_revision, revision, original_filename, deleted_line_number)
     if line_in_revision is not None:
         #Line is not deleted on this revision.... returning None
         return None
     # if in all parents (that are _not_ part of treeish1) the line is gone, then we found the revision where it was deleted
     for parent in get_parent_revisions(revision):
-        if parent not in revisions_treeish2:
+        if parent not in revisions_target:
             #Parent is in the history of treeish1, discarding for analysis
             continue
-        if reverse:
-            line_in_revision = get_line_in_revision(treeish2, parent, original_filename, deleted_line_number)
-        else:
-            line_in_revision = get_line_in_revision(treeish1, parent, original_filename, deleted_line_number)
+        line_in_revision = get_line_in_revision(starting_revision, parent, original_filename, deleted_line_number)
         if line_in_revision is None:
             #Line is _not_ included in this parent... going into this parent
-            if reverse:
-                result = process_deleted_line(treeish2, parent, original_filename, deleted_line_number, reverse)
-            else:
-                result = process_deleted_line(treeish1, parent, original_filename, deleted_line_number, reverse)
+            result = process_deleted_line(starting_revision, parent, original_filename, deleted_line_number)
             if result is not None:
                 return result
     # if we reached this point, we ran out of parents... this is the culprit revision
