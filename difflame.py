@@ -365,7 +365,7 @@ def get_full_revision_id(revision):
         # we already had the revision
         return REVISIONS_ID_CACHE[revision]
     # fallback to get it from git
-    full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
+    full_revision = run_git_command(["rev-list", "--max-count=1", revision]).split("\n")[0]
     REVISIONS_ID_CACHE[revision] = full_revision
     return full_revision
 
