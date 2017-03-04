@@ -198,11 +198,19 @@ class DiffHunk:
         original_pos = positions[0].split(",")
         self.original_file_starting_line = abs(int(original_pos[0]))
         # the ending line is the first line _after_ the hunk
-        self.original_file_ending_line = self.original_file_starting_line + int(original_pos[1])
+        if len(original_pos) == 1:
+            # only had a single line in the block
+            self.original_file_ending_line = self.original_file_starting_line + 1
+        else:
+            self.original_file_ending_line = self.original_file_starting_line + int(original_pos[1])
         final_pos = positions[1].split(",")
         self.final_file_starting_line = abs(int(final_pos[0]))
         # the ending line is the first line _after_ the hunk
-        self.final_file_ending_line = self.final_file_starting_line + int(final_pos[1])
+        if len(final_pos) == 1:
+            # only had a single line in the block
+            self.final_file_ending_line = self.final_file_starting_line + 1
+        else:
+            self.final_file_ending_line = self.final_file_starting_line + int(final_pos[1])
         
         self.raw_content = raw_content
         # in what line (of raw content), does 'real content' start?
