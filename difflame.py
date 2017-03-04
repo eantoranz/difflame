@@ -234,6 +234,7 @@ class DiffHunk:
             sys.stdout.write(self.raw_content[0][:index_of_separation + 2])
             sys.stdout.write(COLOR_RESET)
             sys.stdout.write(self.raw_content[0][index_of_separation+2:])
+            print ""
         else:
             print self.raw_content[0] # hunk descrtiptor line
     
