@@ -9,6 +9,7 @@ import sys
 from time import time
 
 # color codes
+COLOR_CYAN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x36) + chr(0x6d)
 COLOR_GREEN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x32) + chr(0x6d)
 COLOR_RED=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x31) + chr(0x6d)
 COLOR_WHITE=chr(0x1b) + chr(0x5b) + chr(0x31) + chr(0x6d)
@@ -223,13 +224,26 @@ class DiffHunk:
                 break
             i+=1
     
+    def printDescriptorLine(self):
+        '''
+        Print hunk description line
+        '''
+        if OPTIONS['COLOR']:
+            sys.stdout.write(COLOR_CYAN)
+            index_of_separation = self.raw_content[0].index('@@', 2)
+            sys.stdout.write(self.raw_content[0][:index_of_separation + 2])
+            sys.stdout.write(COLOR_RESET)
+            sys.stdout.write(self.raw_content[0][index_of_separation+2:])
+        else:
+            print self.raw_content[0] # hunk descrtiptor line
+    
     def stdoutPrint(self, original_file_blame, final_file_blame, reverse):
         """
         Print hunk on stdout
         
         if doing a reverse blame operation, blaming analysis has to be performed treeish2..treeish1
         """
-        print self.raw_content[0] # hunk descrtiptor line
+        self.printDescriptorLine()
         previous_revision=None
         if reverse:
             starting_revision = self.diff_file_object.final_revision
