@@ -46,9 +46,9 @@ REVISIONS_INFO_CACHE=dict()
 
 '''
 caches to save:
-    - reverse blamed files
     - diff of files when analyzing revisions (merges and so on)
-    - merge bases
+    - revisions between 2 revisions (treeish1..treeish2)
+    - full revision ID corresponding to some treeish (tag, short revision ID, etc)
 
 DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
 use get_line_in_revision()
@@ -56,10 +56,13 @@ use get_line_in_revision()
 REVISIONS_CACHE[treeish1][treeish2]
 use get_revisions()
 
-filename is as it shows up on final_revision
+REVISIONS_ID_CACHE[treeish]
+use get_full_revision_id()
+
 '''
 DIFF_FILES_CACHE = None
 REVISIONS_CACHE = dict()
+REVISIONS_ID_CACHE = dict()
 
 class DiffFileObject:
     '''
@@ -350,12 +353,12 @@ def get_full_revision_id(revision):
     # if revision has a prepending '^', we strip it
     if revision[0] == '^':
         revision = revision[1:]
-    if revision in REVISIONS_CACHE:
+    if revision in REVISIONS_ID_CACHE:
         # we already had the revision
-        return REVISIONS_CACHE[revision]
+        return REVISIONS_ID_CACHE[revision]
     # fallback to get it from git
     full_revision = run_git_command(["show", "--pretty=%H", revision]).split("\n")[0]
-    REVISIONS_CACHE[revision] = full_revision
+    REVISIONS_ID_CACHE[revision] = full_revision
     return full_revision
 
 def get_revisions(treeish1, treeish2, filename = None):
