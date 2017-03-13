@@ -26,10 +26,51 @@ OPTIONS['COLOR']=False
 DIFF_OPTIONS=[]
 BLAME_OPTIONS=[]
 
+def run_git_command(args):
+    global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
+    """
+    Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
+    """
+    command = ["git"]
+    command.extend(args)
+    if DEBUG_GIT:
+        TOTAL_GIT_EXECUTIONS+=1
+        commandStr=""
+        for word in command:
+            commandStr+=word + " "
+        sys.stderr.write("git execution: " + str(commandStr) + "...")
+        starting_time=time()
+    result = subprocess.check_output(command)
+    if DEBUG_GIT:
+        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
+        sys.stderr.flush()
+    return result
+
+def run_git_blame(arguments):
+    '''
+    Run a git blame command. Will return raw output
+    '''
+    args=["blame", "--no-progress"]
+    if len(BLAME_OPTIONS) > 0:
+        args.extend(BLAME_OPTIONS)
+    args.extend(arguments)
+    return run_git_command(args)
+
+def run_git_diff(arguments):
+    '''
+    Run a git diff command. Will return raw output
+    '''
+    args=["diff"]
+    if len(DIFF_OPTIONS) > 0:
+        args.extend(DIFF_OPTIONS)
+    args.extend(arguments)
+    return run_git_command(args)
 
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
+# shortned revision ID length
+SHORT_REV_LENGTH=len(run_git_command(["log", "--max-count=1", "--pretty=%h", "HEAD"]).split("\n")[0])
 
 # caches
 
@@ -42,8 +83,83 @@ REVISIONS_CACHE=dict()
 # direct parent nodes of each revision
 PARENT_REVISIONS_CACHE=dict() # TODO does it have to be calculated depending on the path that is being analyzed?
 
-# information displayed for each revision on modified lines
+'''
+information displayed for each revision on modified lines
+- shortened-id
+- author
+- author_mail
+- author_time
+- author_tz
+- committer
+- committer_mail
+- committer_time
+- committer_tz
+- summary
+
+use get_revision_info(full-rev-id)
+'''
 REVISIONS_INFO_CACHE=dict()
+
+def get_revision_info(full_id):
+    '''
+    Pull information about a revision
+    
+    if the revision is not present, information will be pulled from git
+    '''
+    if full_id not in REVISIONS_INFO_CACHE:
+        # information was not present.... have to pull it from git
+        values = dict()
+        values['revision'] = full_id
+        output = run_git_command(["cat-file", "-p", full_id]).split("\n")
+        summary_next = False
+        for line in output:
+            if summary_next:
+                # this line is the summary
+                values['summary'] = line
+                break # that's it
+            if len(line) == 0:
+                summary_next = True
+            else:
+                separator_index = line.index(' ')
+                field = line[:separator_index]
+                if field == 'author':
+                    email_start_index = line.index('<')
+                    values['author'] = line[separator_index + 1:email_start_index - 1]
+                    separator_index = line.index('>')
+                    values['author_mail'] = line[email_start_index + 1:separator_index]
+                    temp = line.split(" ")
+                    values['author_time'] = temp[-2]
+                    values['author_tz'] = temp[-1]
+                elif field == 'committer':
+                    email_start_index = line.index('<')
+                    values['committer'] = line[separator_index + 1:email_start_index - 1]
+                    separator_index = line.index('>')
+                    values['committer_mail'] = line[email_start_index + 1:separator_index]
+                    temp = line.split(" ")
+                    values['committer_time'] = temp[-2]
+                    values['committer_tz'] = temp[-1]
+        REVISIONS_INFO_CACHE[full_id] = values
+    return REVISIONS_INFO_CACHE[full_id]
+
+def set_revision_information(full_id, author, author_mail, author_time, author_tz,
+                             committer, committer_mail, committer_time, committer_tz,
+                             summary):
+    '''
+    Save revision information (if it wasn't already saved)
+    '''
+    if full_id not in REVISIONS_INFO_CACHE:
+        values = []
+        values.revision = full_id,
+        values.author = author
+        values.author_mail = author_mail
+        values.author_time = author_time
+        values.author_tz = author_tz
+        values.committer = committer
+        values.committer_mail = committer_mail
+        values.committer_time = committer_time
+        values.committer_tz = committer_tz
+        values.summary = summary
+        REVISIONS_INFO_CACHE[full_id] = values
 
 '''
 caches to save:
@@ -125,7 +241,7 @@ class DiffFileObject:
         file_name = cleanup_filename(file_name)
         
         # starting to build git command arguments
-        git_blame_opts = []
+        git_blame_opts = ["--line-porcelain"]
         
         for hunk_position in hunk_positions:
             hunk_position = hunk_position.split(',')
@@ -153,7 +269,7 @@ class DiffFileObject:
                 git_blame_opts.append(self.final_revision)
         else:
             # reverse blame
-            git_blame_opts.extend(["--reverse", "-s"])
+            git_blame_opts.append("--reverse")
             if reverse_analysis:
                 git_blame_opts.extend([self.final_revision + ".." + self.starting_revision])
             else:
@@ -187,8 +303,29 @@ class DiffFileObject:
         original_file_blame = self.getOriginalFileBlame(reverse)
         final_file_blame = self.getFinalFileBlame(reverse)
         for hunk in self.hunks:
-            hunk.stdoutPrint(original_file_blame, final_file_blame, reverse)
-            
+            hunk.processHunk(original_file_blame, final_file_blame, reverse)
+            hunk.printLines(reverse)
+    
+class HunkLine:
+    '''
+    Structure to hold information for a line on the hunk:
+    - Added:
+        Whether the line was added (True), removed (False), or left as is (None)
+    - Revision
+    - Filename
+    - Line on starting revision
+    - Line on final revision
+    - Content
+    '''
+    
+    def __init__(self, added, revision, filename, starting_line, final_line, content):
+        self.added = added
+        self.revision = revision
+        self.filename = filename
+        self.starting_line = starting_line
+        self.final_line = final_line
+        self.content = content
+
 class DiffHunk:
     '''
     Object to hold hunk information
@@ -223,6 +360,75 @@ class DiffHunk:
                 self.content_starting_index = i
                 break
             i+=1
+        
+        self.lines = None
+    
+    def printLines(self, reverse):
+        '''
+        Print all lines (it will eventually include params to control output width and so on)
+        '''
+        previous_revision = None
+        self.printDescriptorLine()
+        for line in self.lines:
+            revision_info = get_revision_info(line.revision)
+            if isinstance(line, HunkLine):
+                if OPTIONS['HINTS']:
+                    # hints are being printed
+                    if line.added is not None:
+                        # line is added or deleted
+                        if previous_revision is None or previous_revision != line.revision:
+                            # have to print the hink
+                            revision = get_revision_info(line.revision)
+                            if OPTIONS['COLOR']:
+                                sys.stdout.write(COLOR_WHITE)
+                            sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision['summary'])
+                            if OPTIONS['COLOR']:
+                                sys.stdout.write(COLOR_RESET)
+                            print
+                            previous_revision = line.revision
+                    else:
+                        previous_revision = None
+                if line.added is None:
+                    sys.stdout.write(' ')
+                elif not reverse and line.added or reverse and not line.added:
+                    if OPTIONS['COLOR']:
+                        sys.stdout.write(COLOR_GREEN)
+                    sys.stdout.write('+')
+                elif not reverse and not line.added or reverse and line.added:
+                    if OPTIONS['COLOR']:
+                        sys.stdout.write(COLOR_RED)
+                    sys.stdout.write('-')
+                sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ' + revision_info['author'] + ' <' + revision_info['author_mail'] + '> ' + revision_info['author_time'] + ' ' + revision_info['author_tz'] + ' ')
+                if line.added is None or not reverse and not line.added or reverse and line.added:
+                    if reverse:
+                        line_number = line.final_line
+                    else:
+                        line_number = line.starting_line
+                    if line_number is None:
+                        sys.stdout.write('None')
+                    else:
+                        sys.stdout.write(str(line_number))
+                else:
+                    sys.stdout.write('None')
+                sys.stdout.write(' ')
+                if line.added is None or not reverse and line.added or reverse and not line.added:
+                    if reverse:
+                        line_number = line.starting_line
+                    else:
+                        line_number = line.final_line
+                    if line_number is None:
+                        sys.stdout.write('None')
+                    else:
+                        sys.stdout.write(str(line_number))
+                else:
+                    sys.stdout.write('None')
+                sys.stdout.write(') ' + line.content)
+                if OPTIONS['COLOR']:
+                    sys.stdout.write(COLOR_RESET)
+                print
+            else:
+                print line
+            sys.stdout.flush()
     
     def printDescriptorLine(self):
         '''
@@ -238,14 +444,11 @@ class DiffHunk:
         else:
             print self.raw_content[0] # hunk descrtiptor line
     
-    def stdoutPrint(self, original_file_blame, final_file_blame, reverse):
+    def processHunk(self, original_file_blame, final_file_blame, reverse):
+        lines = []
         """
-        Print hunk on stdout
-        
-        if doing a reverse blame operation, blaming analysis has to be performed treeish2..treeish1
+        analyze hunk and save its lines
         """
-        self.printDescriptorLine()
-        previous_revision=None
         if reverse:
             starting_revision = self.diff_file_object.final_revision
             target_revision = self.diff_file_object.starting_revision
@@ -254,112 +457,80 @@ class DiffHunk:
             target_revision = self.diff_file_object.final_revision
         for line in self.raw_content[1:]:
             if line[0] == ' ':
-                # added line (no color) or unchanged line
-                # print line from final blame
-                blame_line = final_file_blame.pop(0)
+                # unchanged line
+                final_line = self.readPorcelainLine(final_file_blame)
                 # move on the original_blame cause we got blame info from final_file_blame
-                original_file_blame.pop(0)
-                # reset previous revision
-                previous_revision=None
-                print line[0] + blame_line
+                original_line = self.readPorcelainLine(original_file_blame)
+                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], final_line['original_line'], final_line['final_line'], final_line['content']))
             elif not reverse and line[0] == '+' or reverse and line[0] == '-':
-                blame_line = final_file_blame.pop(0)
-                # have to process revision to see it we need to print hint before the revision
-                current_revision = process_added_line(blame_line)
-                previous_revision = print_revision_line(current_revision, previous_revision, True)
-                # print line from final blame with color adjusted
-                if OPTIONS['COLOR']:
-                    if reverse:
-                        sys.stdout.write(COLOR_RED)
-                    else:
-                        sys.stdout.write(COLOR_GREEN)
+                final_line = self.readPorcelainLine(final_file_blame)
                 if reverse:
-                    sys.stdout.write('-')
+                    ending_line_number = final_line['original_line']
                 else:
-                    sys.stdout.write('+')
-                sys.stdout.write(blame_line)
-                if OPTIONS['COLOR']:
-                    sys.stdout.write(COLOR_RESET)
-                print ""
+                    ending_line_number = final_line['final_line']
+                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], None, ending_line_number, final_line['content']))
             elif not reverse and line[0] == '-' or reverse and line[0] == '+':
                 # it's a line that was deleted so have to pull it from original_blame
-                blame_line = original_file_blame.pop(0)
+                original_line = self.readPorcelainLine(original_file_blame)
                 # what is the _real_ revision where the lines were deleted?
-                deleted_line_number = get_line_number_from_deleted_line(blame_line)
-                revision = get_revision_from_modified_line(blame_line)
-                original_revision = revision # so that we can print the exact text later on if needed
-                revision=get_full_revision_id(revision)
-                deletion_revision = process_deleted_line(starting_revision, target_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
+                deleted_line_number = original_line['original_line']
+                revision = original_line['revision']
+                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], deleted_line_number)
                 # print hint if needed
                 if deletion_revision is None:
-                    print_revision_line(revision, previous_revision, False)
+                    hunk_line = HunkLine(False, revision, original_line['filename'], deleted_line_number, None, original_line['content'])
                 else:
-                    print_revision_line(deletion_revision, previous_revision, False)
-                # do we have the filename?
-                revision_info_fields = filter(None, blame_line[:blame_line.find(')')].split(" "))
-                filename = None
-                if len(revision_info_fields) == 3: # filename is included in output
-                    filename = revision_info_fields[1]
-                # got the revision where the line was deleted... let's show it
-                if deletion_revision is None:
-                    print_deleted_revision_info(revision, filename, reverse, False)
-                else:
-                    print_deleted_revision_info(deletion_revision, filename, reverse)
-                # line number and content
-                sys.stdout.write(" " + str(get_line_number_from_deleted_line(blame_line)) + blame_line[blame_line.find(')'):])
-                if OPTIONS['COLOR']:
-                    sys.stdout.write(COLOR_RESET)
-                if deletion_revision is None:
-                    previous_revision = revision
-                else:
-                    previous_revision = deletion_revision
-                print ""
+                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], deleted_line_number, None, original_line['content'])
+                lines.append(hunk_line)
             elif line[0]=='\\':
-                # print original line, nothing is added
-                print line
-                # reset previous revision
-                previous_revision=None
+                lines.append(line)
     
-    # done printing the hunk
-def run_git_command(args):
-    global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
-    """
-    Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
-    """
-    command = ["git"]
-    command.extend(args)
-    if DEBUG_GIT:
-        TOTAL_GIT_EXECUTIONS+=1
-        commandStr=""
-        for word in command:
-            commandStr+=word + " "
-        sys.stderr.write("git execution: " + str(commandStr) + "...")
-        starting_time=time()
-    result = subprocess.check_output(command)
-    if DEBUG_GIT:
-        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
-        sys.stderr.flush()
-    return result
+        self.lines = lines
 
-def run_git_blame(arguments):
-    '''
-    Run a git blame command. Will return raw output
-    '''
-    args=["blame", "--no-progress"]
-    if len(BLAME_OPTIONS) > 0:
-        args.extend(BLAME_OPTIONS)
-    args.extend(arguments)
-    return run_git_command(args)
-
-def run_git_diff(arguments):
-    '''
-    Run a git diff command. Will return raw output
-    '''
-    args=["diff"]
-    if len(DIFF_OPTIONS) > 0:
-        args.extend(DIFF_OPTIONS)
-    args.extend(arguments)
-    return run_git_command(args)
+    def readPorcelainLine(self, porcelainOutput):
+        '''
+        Read the content of a blame --line-porcelain.
+        Will return a dict with the following keys:
+        - revision (full ID)
+        - original_line
+        - final_line
+        - author
+        - author-mail
+        - author-time
+        - author-tz
+        - committer
+        - committer-mail
+        - committer-time
+        - committer-tz
+        - summary
+        - previous
+        - filename
+        - boundary (True, False)
+        - content
+        '''
+        values = dict()
+        temp = porcelainOutput.pop(0).split(" ")
+        values['revision'] = temp[0]
+        values['original_line'] = int(temp[1])
+        values['final_line'] = int(temp[2])
+        values['boundary'] = False
+        
+        while True:
+            line = porcelainOutput.pop(0)
+            if line[0] == '\t':
+                # content line
+                values['content'] = line[1:]
+                break
+            else:
+                if line == 'boundary':
+                    values['boundary'] = True
+                    continue
+                separator = line.index(' ')
+                field = line[:separator]
+                value = line[separator + 1:]
+                values[field] = value
+        # TODO we coud save revision information so that we don't have to do it later on
+        return values
 
 def git_revision_hint(revision):
     """
@@ -631,12 +802,7 @@ def print_deleted_revision_info(revision_id, filename, reverse, found_revision =
     
     if _not_ found_revision then revision is taken directly from blame --reverse
     """
-    info = None
-    if revision_id in REVISIONS_INFO_CACHE:
-        info = REVISIONS_INFO_CACHE[revision_id]
-    else:
-        info = run_git_command(["show", "--pretty=%h (%an %ai", revision_id]).split("\n")[0]
-        REVISIONS_INFO_CACHE[revision_id] = info
+    info = get_revision_info(revision_id)
     if OPTIONS['COLOR']:
         if reverse:
             sys.stdout.write(COLOR_GREEN)
