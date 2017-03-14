@@ -157,17 +157,17 @@ def set_revision_information(full_id, author, author_mail, author_time, author_t
     Save revision information (if it wasn't already saved)
     '''
     if full_id not in REVISIONS_INFO_CACHE:
-        values = []
-        values.revision = full_id,
-        values.author = author
-        values.author_mail = author_mail
-        values.author_time = author_time
-        values.author_tz = author_tz
-        values.committer = committer
-        values.committer_mail = committer_mail
-        values.committer_time = committer_time
-        values.committer_tz = committer_tz
-        values.summary = summary
+        values = dict()
+        values['revision'] = full_id
+        values['author'] = author
+        values['author_mail'] = author_mail
+        values['author_time'] = author_time
+        values['author_tz'] = author_tz
+        values['committer'] = committer
+        values['committer_mail'] = committer_mail
+        values['committer_time'] = committer_time
+        values['committer_tz'] = committer_tz
+        values['summary'] = summary
         REVISIONS_INFO_CACHE[full_id] = values
 
 '''
@@ -597,7 +597,11 @@ class DiffHunk:
                 field = line[:separator]
                 value = line[separator + 1:]
                 values[field] = value
-        # TODO we coud save revision information so that we don't have to do it later on
+        
+        # save in cache if we don't have information about the revision yet
+        set_revision_information(values['revision'], values['author'], values['author-mail'][1:-1], values['author-time'], values['author-tz'],
+                             values['committer'], values['committer-mail'][1:-1], values['committer-time'], values['committer-tz'],
+                             values['summary'])
         return values
 
 def git_revision_hint(revision):
