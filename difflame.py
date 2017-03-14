@@ -302,9 +302,22 @@ class DiffFileObject:
         # print hunks
         original_file_blame = self.getOriginalFileBlame(reverse)
         final_file_blame = self.getFinalFileBlame(reverse)
+        max_starting_line = None
+        max_final_line = None
         for hunk in self.hunks:
             hunk.processHunk(original_file_blame, final_file_blame, reverse)
-            hunk.printLines(reverse)
+            if hunk.max_starting_line is not None:
+                max_starting_line = hunk.max_starting_line
+            if hunk.max_final_line is not None:
+                max_final_line = hunk.max_final_line
+        starting_line_width = 0
+        final_line_width = 0
+        if max_starting_line is not None:
+            starting_line_width = len(str(max_starting_line))
+        if max_final_line is not None:
+            final_line_width = len(str(max_final_line))
+        for hunk in self.hunks:
+            hunk.printLines(reverse, starting_line_width, final_line_width)
     
 class HunkLine:
     '''
@@ -362,8 +375,12 @@ class DiffHunk:
             i+=1
         
         self.lines = None
+        
+        # max line number (for formatting)
+        self.max_starting_line = None
+        self.max_final_line = None
     
-    def printLines(self, reverse):
+    def printLines(self, reverse, starting_line_width, final_line_width):
         '''
         Print all lines (it will eventually include params to control output width and so on)
         '''
@@ -405,11 +422,11 @@ class DiffHunk:
                     else:
                         line_number = line.starting_line
                     if line_number is None:
-                        sys.stdout.write('None')
+                        sys.stdout.write(' ' * starting_line_width)
                     else:
-                        sys.stdout.write(str(line_number))
+                        sys.stdout.write(("%" + str(starting_line_width) + "d") % line_number)
                 else:
-                    sys.stdout.write('None')
+                    sys.stdout.write(' ' * starting_line_width)
                 sys.stdout.write(' ')
                 if line.added is None or not reverse and line.added or reverse and not line.added:
                     if reverse:
@@ -417,11 +434,11 @@ class DiffHunk:
                     else:
                         line_number = line.final_line
                     if line_number is None:
-                        sys.stdout.write('None')
+                        sys.stdout.write(' ' * final_line_width)
                     else:
-                        sys.stdout.write(str(line_number))
+                        sys.stdout.write(("%" + str(final_line_width) + "d") % line_number)
                 else:
-                    sys.stdout.write('None')
+                    sys.stdout.write(' ' * final_line_width)
                 sys.stdout.write(') ' + line.content)
                 if OPTIONS['COLOR']:
                     sys.stdout.write(COLOR_RESET)
@@ -461,26 +478,28 @@ class DiffHunk:
                 final_line = self.readPorcelainLine(final_file_blame)
                 # move on the original_blame cause we got blame info from final_file_blame
                 original_line = self.readPorcelainLine(original_file_blame)
-                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], final_line['original_line'], final_line['final_line'], final_line['content']))
+                self.max_starting_line = original_line['final_line']
+                self.max_final_line = final_line['final_line']
+                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], self.max_starting_line, self.max_final_line, final_line['content']))
             elif not reverse and line[0] == '+' or reverse and line[0] == '-':
                 final_line = self.readPorcelainLine(final_file_blame)
                 if reverse:
-                    ending_line_number = final_line['original_line']
+                    self.max_final_line = final_line['original_line']
                 else:
-                    ending_line_number = final_line['final_line']
-                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], None, ending_line_number, final_line['content']))
+                    self.max_final_line = final_line['final_line']
+                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], None, self.max_final_line, final_line['content']))
             elif not reverse and line[0] == '-' or reverse and line[0] == '+':
                 # it's a line that was deleted so have to pull it from original_blame
                 original_line = self.readPorcelainLine(original_file_blame)
                 # what is the _real_ revision where the lines were deleted?
-                deleted_line_number = original_line['original_line']
+                self.max_starting_line = original_line['original_line']
                 revision = original_line['revision']
-                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], deleted_line_number)
+                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], self.max_starting_line)
                 # print hint if needed
                 if deletion_revision is None:
-                    hunk_line = HunkLine(False, revision, original_line['filename'], deleted_line_number, None, original_line['content'])
+                    hunk_line = HunkLine(False, revision, original_line['filename'], self.max_starting_line, None, original_line['content'])
                 else:
-                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], deleted_line_number, None, original_line['content'])
+                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], self.max_starting_line, None, original_line['content'])
                 lines.append(hunk_line)
             elif line[0]=='\\':
                 lines.append(line)
