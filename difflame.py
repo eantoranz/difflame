@@ -302,6 +302,8 @@ class DiffFileObject:
         # print hunks
         original_file_blame = self.getOriginalFileBlame(reverse)
         final_file_blame = self.getFinalFileBlame(reverse)
+        max_author_width = 0
+        max_mail_width = 0
         max_starting_line = None
         max_final_line = None
         for hunk in self.hunks:
@@ -310,6 +312,10 @@ class DiffFileObject:
                 max_starting_line = hunk.max_starting_line
             if hunk.max_final_line is not None:
                 max_final_line = hunk.max_final_line
+            if hunk.max_author_width > max_author_width:
+                max_author_width = hunk.max_author_width
+            if hunk.max_mail_width > max_mail_width:
+                max_mail_width = hunk.max_mail_width
         starting_line_width = 0
         final_line_width = 0
         if max_starting_line is not None:
@@ -317,7 +323,7 @@ class DiffFileObject:
         if max_final_line is not None:
             final_line_width = len(str(max_final_line))
         for hunk in self.hunks:
-            hunk.printLines(reverse, starting_line_width, final_line_width)
+            hunk.printLines(reverse, max_author_width, max_mail_width, starting_line_width, final_line_width)
     
 class HunkLine:
     '''
@@ -376,11 +382,13 @@ class DiffHunk:
         
         self.lines = None
         
+        self.max_author_width = 0 # maximum width for an author name
+        self.max_mail_width = 0 # max width for an author email
         # max line number (for formatting)
         self.max_starting_line = None
         self.max_final_line = None
     
-    def printLines(self, reverse, starting_line_width, final_line_width):
+    def printLines(self, reverse, max_author_width, max_mail_width, starting_line_width, final_line_width):
         '''
         Print all lines (it will eventually include params to control output width and so on)
         '''
@@ -415,7 +423,10 @@ class DiffHunk:
                     if OPTIONS['COLOR']:
                         sys.stdout.write(COLOR_RED)
                     sys.stdout.write('-')
-                sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ' + revision_info['author'] + ' <' + revision_info['author_mail'] + '> ' + revision_info['author_time'] + ' ' + revision_info['author_tz'] + ' ')
+                sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
+                sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))))
+                sys.stdout.write(' <' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))))
+                sys.stdout.write(' ' + revision_info['author_time'] + ' ' + revision_info['author_tz'] + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
                     if reverse:
                         line_number = line.final_line
@@ -501,9 +512,18 @@ class DiffHunk:
                 else:
                     hunk_line = HunkLine(False, deletion_revision, original_line['filename'], self.max_starting_line, None, original_line['content'])
                 lines.append(hunk_line)
-            elif line[0]=='\\':
+            if line[0]=='\\':
                 lines.append(line)
-    
+            else:
+                # HunkLine is already in
+                revision_info = get_revision_info(lines[-1].revision)
+                author_width = len(revision_info['author'].decode('utf-8'))
+                mail_width = len(revision_info['author_mail'])
+                if author_width > self.max_author_width:
+                    self.max_author_width = author_width
+                if mail_width > self.max_mail_width:
+                    self.max_mail_width = mail_width
+        
         self.lines = lines
 
     def readPorcelainLine(self, porcelainOutput):
