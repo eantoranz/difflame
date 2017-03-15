@@ -7,6 +7,7 @@
 import subprocess
 import sys
 from time import time
+from datetime import datetime
 
 # color codes
 COLOR_CYAN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x36) + chr(0x6d)
@@ -426,7 +427,7 @@ class DiffHunk:
                 sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
                 sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))))
                 sys.stdout.write(' <' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))))
-                sys.stdout.write(' ' + revision_info['author_time'] + ' ' + revision_info['author_tz'] + ' ')
+                sys.stdout.write(' ' + str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
                     if reverse:
                         line_number = line.final_line
