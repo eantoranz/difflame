@@ -431,6 +431,8 @@ class DiffHunk:
                         sys.stdout.write(COLOR_RED)
                     sys.stdout.write('-')
                 sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
+                if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
+                    sys.stdout.write('(')
                 if OPTIONS['SHOWNAME']:
                     sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))) + ' ')
                 if OPTIONS['SHOWMAIL']:
