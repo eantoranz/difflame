@@ -19,9 +19,13 @@ COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 # general OPTIONS for difflame
 # HINTS: use hints (1-line summary of a revision)
 # COLOR: use color on output
+# SHOWNAME: print name of author
+# SHOWMAIL: print mail of author
 OPTIONS=dict()
 OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
+OPTIONS['SHOWNAME'] = True
+OPTIONS['SHOWMAIL'] = False
 
 # options used for diff and blame
 DIFF_OPTIONS=[]
@@ -425,9 +429,11 @@ class DiffHunk:
                         sys.stdout.write(COLOR_RED)
                     sys.stdout.write('-')
                 sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
-                sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))))
-                sys.stdout.write(' <' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))))
-                sys.stdout.write(' ' + str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
+                if OPTIONS['SHOWNAME']:
+                    sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))) + ' ')
+                if OPTIONS['SHOWMAIL']:
+                    sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
+                sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
                     if reverse:
                         line_number = line.final_line
@@ -971,7 +977,12 @@ for param in sys.argv[1:]:
                     diff_param=param[param.index('=') + 1:]
                     DIFF_OPTIONS.append(diff_param)
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
-                    BLAME_OPTIONS.append(param[param.index('=') + 1:])
+                    blame_param = param[param.index('=') + 1:]
+                    if blame_param == "-e":
+                        OPTIONS['SHOWNAME'] = False
+                        OPTIONS['SHOWMAIL'] = True
+                    else:
+                        BLAME_OPTIONS.append()
                 elif param in ["--tips", "--hints"]:
                     # Will support them but they are unnecessary
                     continue
@@ -985,6 +996,9 @@ for param in sys.argv[1:]:
             # avoid space changes
             BLAME_OPTIONS.append(param)
             DIFF_OPTIONS.append(param)
+        elif param == "-e":
+            OPTIONS['SHOWNAME'] = False
+            OPTIONS['SHOWMAIL'] = True
         else:
             # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
             if treeish1 is not None:
