@@ -21,11 +21,13 @@ COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 # COLOR: use color on output
 # SHOWNAME: print name of author
 # SHOWMAIL: print mail of author
+# SHOWDATE: show date
 OPTIONS=dict()
 OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
 OPTIONS['SHOWNAME'] = True
 OPTIONS['SHOWMAIL'] = False
+OPTIONS['SHOWDATE'] = True
 
 # options used for diff and blame
 DIFF_OPTIONS=[]
@@ -433,7 +435,8 @@ class DiffHunk:
                     sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))) + ' ')
                 if OPTIONS['SHOWMAIL']:
                     sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
-                sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
+                if OPTIONS['SHOWDATE']:
+                    sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
                     if reverse:
                         line_number = line.final_line
@@ -981,6 +984,10 @@ for param in sys.argv[1:]:
                     if blame_param == "-e":
                         OPTIONS['SHOWNAME'] = False
                         OPTIONS['SHOWMAIL'] = True
+                    elif blame_param == "-s":
+                        OPTIONS['SHOWNAME'] = False
+                        OPTIONS['SHOWMAIL'] = False
+                        OPTIONS['SHOWDATE'] = False
                     else:
                         BLAME_OPTIONS.append()
                 elif param in ["--tips", "--hints"]:
@@ -999,6 +1006,10 @@ for param in sys.argv[1:]:
         elif param == "-e":
             OPTIONS['SHOWNAME'] = False
             OPTIONS['SHOWMAIL'] = True
+        elif param == "-s":
+            OPTIONS['SHOWNAME'] = False
+            OPTIONS['SHOWMAIL'] = False
+            OPTIONS['SHOWDATE'] = False
         else:
             # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
             if treeish1 is not None:
