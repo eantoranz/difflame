@@ -307,7 +307,7 @@ class DiffFileObject:
         if max_final_line is not None:
             self.final_line_width = len(str(max_final_line))
     
-    def stdoutPrint(self, reverse):
+    def stdoutPrint(self, reverse, max_name_width):
         '''
         Print Diff Object
         '''
@@ -326,7 +326,7 @@ class DiffFileObject:
             return
         
         for hunk in self.hunks:
-            hunk.printLines(reverse, self.getMaxNameWidth(), self.getMaxNameWidth(), self.starting_line_width, self.final_line_width)
+            hunk.printLines(reverse, max_name_width, self.getMaxNameWidth(), self.starting_line_width, self.final_line_width)
     
     def getMaxNameWidth(self):
         '''
@@ -946,6 +946,8 @@ def process_diff_output(output, treeish1, treeish2):
     if merge_base == treeish2:
         reverse = True
     
+    diff_file_objects = []
+    max_name_width = 0
     while i < len(lines):
         starting_line = lines[i]
         if len(starting_line) == 0:
@@ -955,7 +957,13 @@ def process_diff_output(output, treeish1, treeish2):
         DIFF_FILES_CACHE=dict()
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
         diff_file_object.process(reverse)
-        diff_file_object.stdoutPrint(reverse)
+        temp = diff_file_object.getMaxNameWidth()
+        if temp > max_name_width:
+            max_name_width = temp
+        diff_file_objects.append(diff_file_object)
+    
+    for diff_file_object in diff_file_objects:
+        diff_file_object.stdoutPrint(reverse, max_name_width)
 
 # parameters
 treeish1=None
