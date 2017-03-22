@@ -399,6 +399,8 @@ class DiffHunk:
         '''
         Print all lines (it will eventually include params to control output width and so on)
         '''
+        starting_line_number = self.original_file_starting_line
+        final_line_number = self.final_file_starting_line
         previous_revision = None
         self.printDescriptorLine()
         for line in self.lines:
@@ -440,26 +442,14 @@ class DiffHunk:
                 if OPTIONS['SHOWDATE']:
                     sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
-                    if reverse:
-                        line_number = line.final_line
-                    else:
-                        line_number = line.starting_line
-                    if line_number is None:
-                        sys.stdout.write(' ' * starting_line_width)
-                    else:
-                        sys.stdout.write(("%" + str(starting_line_width) + "d") % line_number)
+                    sys.stdout.write(("%" + str(starting_line_width) + "d") % starting_line_number)
+                    starting_line_number += 1
                 else:
                     sys.stdout.write(' ' * starting_line_width)
                 sys.stdout.write(' ')
                 if line.added is None or not reverse and line.added or reverse and not line.added:
-                    if reverse:
-                        line_number = line.starting_line
-                    else:
-                        line_number = line.final_line
-                    if line_number is None:
-                        sys.stdout.write(' ' * final_line_width)
-                    else:
-                        sys.stdout.write(("%" + str(final_line_width) + "d") % line_number)
+                    sys.stdout.write(("%" + str(final_line_width) + "d") % final_line_number)
+                    final_line_number += 1
                 else:
                     sys.stdout.write(' ' * final_line_width)
                 sys.stdout.write(') ' + line.content)
