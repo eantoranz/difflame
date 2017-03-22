@@ -473,6 +473,8 @@ class DiffHunk:
         """
         analyze hunk and save its lines
         """
+        starting_line_number = self.original_file_starting_line
+        ending_line_number = self.final_file_starting_line
         if reverse:
             starting_revision = self.diff_file_object.final_revision
             target_revision = self.diff_file_object.starting_revision
@@ -485,21 +487,21 @@ class DiffHunk:
                 final_line = self.readPorcelainLine(final_file_blame)
                 # move on the original_blame cause we got blame info from final_file_blame
                 original_line = self.readPorcelainLine(original_file_blame)
-                self.max_starting_line = original_line['final_line']
-                self.max_final_line = final_line['final_line']
+                self.max_starting_line = starting_line_number
+                self.max_final_line = ending_line_number
                 lines.append(HunkLine(None, final_line['revision'], final_line['filename'], final_line['content']))
+                starting_line_number += 1
+                ending_line_number += 1
             elif not reverse and line[0] == '+' or reverse and line[0] == '-':
                 final_line = self.readPorcelainLine(final_file_blame)
-                if reverse:
-                    self.max_final_line = final_line['original_line']
-                else:
-                    self.max_final_line = final_line['final_line']
+                self.max_final_line = ending_line_number
                 lines.append(HunkLine(True, final_line['revision'], final_line['filename'], final_line['content']))
+                ending_line_number += 1
             elif not reverse and line[0] == '-' or reverse and line[0] == '+':
                 # it's a line that was deleted so have to pull it from original_blame
                 original_line = self.readPorcelainLine(original_file_blame)
                 # what is the _real_ revision where the lines were deleted?
-                self.max_starting_line = original_line['original_line']
+                self.max_starting_line = starting_line_number
                 revision = original_line['revision']
                 deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], self.max_starting_line)
                 # print hint if needed
@@ -508,6 +510,7 @@ class DiffHunk:
                 else:
                     hunk_line = HunkLine(False, deletion_revision, original_line['filename'], original_line['content'])
                 lines.append(hunk_line)
+                starting_line_number += 1
             if line[0]=='\\':
                 lines.append(line)
             else:
