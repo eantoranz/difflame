@@ -452,7 +452,7 @@ class DiffHunk:
                 if OPTIONS['SHOWMAIL']:
                     sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
                 if OPTIONS['SHOWDATE']:
-                    sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ' + revision_info['author_tz'] + ' ')
+                    sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
                     sys.stdout.write(("%" + str(starting_line_width) + "d") % starting_line_number)
                     starting_line_number += 1
