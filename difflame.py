@@ -339,17 +339,13 @@ class HunkLine:
         Whether the line was added (True), removed (False), or left as is (None)
     - Revision
     - Filename
-    - Line on starting revision
-    - Line on final revision
     - Content
     '''
     
-    def __init__(self, added, revision, filename, starting_line, final_line, content):
+    def __init__(self, added, revision, filename, content):
         self.added = added
         self.revision = revision
         self.filename = filename
-        self.starting_line = starting_line
-        self.final_line = final_line
         self.content = content
 
 class DiffHunk:
@@ -493,14 +489,14 @@ class DiffHunk:
                 original_line = self.readPorcelainLine(original_file_blame)
                 self.max_starting_line = original_line['final_line']
                 self.max_final_line = final_line['final_line']
-                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], self.max_starting_line, self.max_final_line, final_line['content']))
+                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], final_line['content']))
             elif not reverse and line[0] == '+' or reverse and line[0] == '-':
                 final_line = self.readPorcelainLine(final_file_blame)
                 if reverse:
                     self.max_final_line = final_line['original_line']
                 else:
                     self.max_final_line = final_line['final_line']
-                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], None, self.max_final_line, final_line['content']))
+                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], final_line['content']))
             elif not reverse and line[0] == '-' or reverse and line[0] == '+':
                 # it's a line that was deleted so have to pull it from original_blame
                 original_line = self.readPorcelainLine(original_file_blame)
@@ -510,9 +506,9 @@ class DiffHunk:
                 deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], self.max_starting_line)
                 # print hint if needed
                 if deletion_revision is None:
-                    hunk_line = HunkLine(False, revision, original_line['filename'], self.max_starting_line, None, original_line['content'])
+                    hunk_line = HunkLine(False, revision, original_line['filename'], original_line['content'])
                 else:
-                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], self.max_starting_line, None, original_line['content'])
+                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], original_line['content'])
                 lines.append(hunk_line)
             if line[0]=='\\':
                 lines.append(line)
