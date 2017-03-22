@@ -294,20 +294,10 @@ class DiffFileObject:
         #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
         original_file_blame = self.getOriginalFileBlame(reverse)
         final_file_blame = self.getFinalFileBlame(reverse)
-        max_starting_line = None
-        max_final_line = None
         for hunk in self.hunks:
             hunk.processHunk(original_file_blame, final_file_blame, reverse)
-            max_starting_line = hunk.original_file_ending_line
-            max_final_line = hunk.final_file_ending_line
-        self.starting_line_width = 0
-        self.final_line_width = 0
-        if max_starting_line is not None:
-            self.starting_line_width = len(str(max_starting_line))
-        if max_final_line is not None:
-            self.final_line_width = len(str(max_final_line))
     
-    def stdoutPrint(self, reverse, max_name_width, max_mail_width):
+    def stdoutPrint(self, reverse, max_name_width, max_mail_width, starting_line_width, final_line_width):
         '''
         Print Diff Object
         '''
@@ -326,7 +316,7 @@ class DiffFileObject:
             return
         
         for hunk in self.hunks:
-            hunk.printLines(reverse, max_name_width, max_mail_width, self.starting_line_width, self.final_line_width)
+            hunk.printLines(reverse, max_name_width, max_mail_width, starting_line_width, final_line_width)
     
     def getMaxNameWidth(self):
         '''
@@ -347,6 +337,25 @@ class DiffFileObject:
             if hunk.max_mail_width > max_width:
                 max_width = hunk.max_mail_width
         return max_width
+    
+    def getMaxStartingLine(self):
+        '''
+        Get the maximum original line
+        '''
+        max_line = 0
+        if len(self.hunks) > 0:
+            max_line = self.hunks[-1].max_starting_line
+        return max_line
+    
+    def getMaxFinalLine(self):
+        '''
+        Get the maximum original line
+        '''
+        max_line = 0
+        if len(self.hunks) > 0:
+            max_line = self.hunks[-1].max_final_line
+        return max_line
+        
     
 class HunkLine:
     '''
@@ -949,6 +958,8 @@ def process_diff_output(output, treeish1, treeish2):
     diff_file_objects = []
     max_name_width = 0
     max_mail_width = 0
+    max_starting_line = 0
+    max_final_line = 0
     while i < len(lines):
         starting_line = lines[i]
         if len(starting_line) == 0:
@@ -964,10 +975,16 @@ def process_diff_output(output, treeish1, treeish2):
         temp = diff_file_object.getMaxMailWidth()
         if temp > max_mail_width:
             max_mail_width = temp
+        temp = diff_file_object.getMaxStartingLine()
+        if temp > max_starting_line:
+            max_starting_line = temp
+        temp = diff_file_object.getMaxFinalLine()
+        if temp > max_final_line:
+            max_final_line = temp
         diff_file_objects.append(diff_file_object)
     
     for diff_file_object in diff_file_objects:
-        diff_file_object.stdoutPrint(reverse, max_name_width, max_mail_width)
+        diff_file_object.stdoutPrint(reverse, max_name_width, max_mail_width, len(str(max_starting_line)), len(str(max_final_line)))
 
 # parameters
 treeish1=None
