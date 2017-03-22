@@ -315,10 +315,8 @@ class DiffFileObject:
         max_final_line = None
         for hunk in self.hunks:
             hunk.processHunk(original_file_blame, final_file_blame, reverse)
-            if hunk.max_starting_line is not None:
-                max_starting_line = hunk.max_starting_line
-            if hunk.max_final_line is not None:
-                max_final_line = hunk.max_final_line
+            max_starting_line = hunk.original_file_ending_line
+            max_final_line = hunk.final_file_ending_line
             if hunk.max_author_width > max_author_width:
                 max_author_width = hunk.max_author_width
             if hunk.max_mail_width > max_mail_width:
