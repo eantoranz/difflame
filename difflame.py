@@ -285,13 +285,32 @@ class DiffFileObject:
         git_blame_opts.extend(["--", file_name])
         return run_git_blame(git_blame_opts)
 
-    def stdoutPrint(self, reverse):
+    def process(self, reverse):
         '''
-        Print the content of the diff for this file (with blame information, the whole package)
+        Process the content of the diff for this file (with blame information, the whole package)
         
         If reverse, "blaming analysis" has to be performed treeish2..treeish1
         '''
         #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
+        original_file_blame = self.getOriginalFileBlame(reverse)
+        final_file_blame = self.getFinalFileBlame(reverse)
+        max_starting_line = None
+        max_final_line = None
+        for hunk in self.hunks:
+            hunk.processHunk(original_file_blame, final_file_blame, reverse)
+            max_starting_line = hunk.original_file_ending_line
+            max_final_line = hunk.final_file_ending_line
+        self.starting_line_width = 0
+        self.final_line_width = 0
+        if max_starting_line is not None:
+            self.starting_line_width = len(str(max_starting_line))
+        if max_final_line is not None:
+            self.final_line_width = len(str(max_final_line))
+    
+    def stdoutPrint(self, reverse):
+        '''
+        Print Diff Object
+        '''
         i=0
         while i < len(self.raw_content) and len(self.raw_content[i]) and self.raw_content[i][0] != '@':
             if OPTIONS['COLOR']:
@@ -306,29 +325,28 @@ class DiffFileObject:
             # no hunks.... binary file probably
             return
         
-        # print hunks
-        original_file_blame = self.getOriginalFileBlame(reverse)
-        final_file_blame = self.getFinalFileBlame(reverse)
-        max_author_width = 0
-        max_mail_width = 0
-        max_starting_line = None
-        max_final_line = None
         for hunk in self.hunks:
-            hunk.processHunk(original_file_blame, final_file_blame, reverse)
-            max_starting_line = hunk.original_file_ending_line
-            max_final_line = hunk.final_file_ending_line
-            if hunk.max_author_width > max_author_width:
-                max_author_width = hunk.max_author_width
-            if hunk.max_mail_width > max_mail_width:
-                max_mail_width = hunk.max_mail_width
-        starting_line_width = 0
-        final_line_width = 0
-        if max_starting_line is not None:
-            starting_line_width = len(str(max_starting_line))
-        if max_final_line is not None:
-            final_line_width = len(str(max_final_line))
+            hunk.printLines(reverse, self.getMaxNameWidth(), self.getMaxNameWidth(), self.starting_line_width, self.final_line_width)
+    
+    def getMaxNameWidth(self):
+        '''
+        Max width of author name
+        '''
+        max_width = 0
         for hunk in self.hunks:
-            hunk.printLines(reverse, max_author_width, max_mail_width, starting_line_width, final_line_width)
+            if hunk.max_author_width > max_width:
+                max_width = hunk.max_author_width
+        return max_width
+
+    def getMaxMailWidth(self):
+        '''
+        Max Mail Width
+        '''
+        max_width = 0
+        for hunk in self.hunks:
+            if hunk.max_mail_width > max_width:
+                max_width = hunk.max_mail_width
+        return max_width
     
 class HunkLine:
     '''
@@ -936,6 +954,7 @@ def process_diff_output(output, treeish1, treeish2):
         BLAMED_FILES_CACHE=dict()
         DIFF_FILES_CACHE=dict()
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
+        diff_file_object.process(reverse)
         diff_file_object.stdoutPrint(reverse)
 
 # parameters
