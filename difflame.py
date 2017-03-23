@@ -427,7 +427,8 @@ class DiffHunk:
         previous_revision = None
         self.printDescriptorLine()
         for line in self.lines:
-            revision_info = get_revision_info(line.revision)
+            if OPTIONS['HINTS'] or OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
+                revision_info = get_revision_info(line.revision)
             if isinstance(line, HunkLine):
                 if OPTIONS['HINTS']:
                     # hints are being printed
@@ -435,10 +436,9 @@ class DiffHunk:
                         # line is added or deleted
                         if previous_revision is None or previous_revision != line.revision:
                             # have to print the hink
-                            revision = get_revision_info(line.revision)
                             if OPTIONS['COLOR']:
                                 sys.stdout.write(COLOR_WHITE)
-                            sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision['summary'])
+                            sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision_info['summary'])
                             if OPTIONS['COLOR']:
                                 sys.stdout.write(COLOR_RESET)
                             print
@@ -544,13 +544,14 @@ class DiffHunk:
                 lines.append(line)
             else:
                 # HunkLine is already in
-                revision_info = get_revision_info(lines[-1].revision)
-                author_width = len(revision_info['author'].decode('utf-8'))
-                mail_width = len(revision_info['author_mail'])
-                if author_width > self.max_author_width:
-                    self.max_author_width = author_width
-                if mail_width > self.max_mail_width:
-                    self.max_mail_width = mail_width
+                if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
+                    revision_info = get_revision_info(lines[-1].revision)
+                    author_width = len(revision_info['author'].decode('utf-8'))
+                    mail_width = len(revision_info['author_mail'])
+                    if author_width > self.max_author_width:
+                        self.max_author_width = author_width
+                    if mail_width > self.max_mail_width:
+                        self.max_mail_width = mail_width
         
         self.lines = lines
 
@@ -859,34 +860,6 @@ def process_deleted_line(starting_revision, target_revision, original_filename, 
     # if we reached this point, we ran out of parents... this is the culprit revision
     return revision
     
-def print_deleted_revision_info(revision_id, filename, reverse, found_revision = True):
-    """
-    Print revision information for a deleled line
-    
-    if filename is provided, have to include the name of the file
-    
-    reverse implies that the analysis is being performed treeish2..treeish1
-    
-    if _not_ found_revision then revision is taken directly from blame --reverse
-    """
-    info = get_revision_info(revision_id)
-    if OPTIONS['COLOR']:
-        if reverse:
-            sys.stdout.write(COLOR_GREEN)
-        else:
-            sys.stdout.write(COLOR_RED)
-    if found_revision:
-        if reverse:
-            sys.stdout.write("+")
-        else:
-            sys.stdout.write("-")
-    else:
-        sys.stdout.write("%")
-    sys.stdout.write(info[:info.index(' ') + 1])
-    if filename is not None:
-        sys.stdout.write(filename + " ")
-    sys.stdout.write(info[info.index(' ') + 1:])
-
 def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2):
     """
     process diff output
