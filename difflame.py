@@ -22,12 +22,14 @@ COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 # SHOWNAME: print name of author
 # SHOWMAIL: print mail of author
 # SHOWDATE: show date
+# PROGRESS: whether to show progress or not
 OPTIONS=dict()
 OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
 OPTIONS['SHOWNAME'] = True
 OPTIONS['SHOWMAIL'] = False
 OPTIONS['SHOWDATE'] = True
+OPTIONS['PROGRESS'] = None
 
 # options used for diff and blame
 DIFF_OPTIONS=[]
@@ -961,6 +963,9 @@ def process_diff_output(output, treeish1, treeish2):
     max_starting_line = 0
     max_final_line = 0
     while i < len(lines):
+        if OPTIONS['PROGRESS']:
+            sys.stderr.write(chr(13) + "Processing line " + str(i) + "/" + str(len(lines)))
+            sys.stderr.flush()
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
@@ -982,6 +987,9 @@ def process_diff_output(output, treeish1, treeish2):
         if temp > max_final_line:
             max_final_line = temp
         diff_file_objects.append(diff_file_object)
+    
+    if OPTIONS['PROGRESS']:
+        sys.stderr.write(chr(13) + "Processing line " + str(len(lines)) + "/" + str(len(lines)) + "\n")
     
     for diff_file_object in diff_file_objects:
         diff_file_object.stdoutPrint(reverse, max_name_width, max_mail_width, len(str(max_starting_line)), len(str(max_final_line)))
@@ -1034,6 +1042,10 @@ for param in sys.argv[1:]:
                     OPTIONS['HINTS'] = False
                 elif param == "--git-debug":
                     DEBUG_GIT = True
+                elif param == "--progress":
+                    OPTIONS['PROGRESS'] = True
+                elif param == "--no-progress":
+                    OPTIONS['PROGRESS'] = False
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
@@ -1070,6 +1082,9 @@ if not color_set:
     # if the user is using a terminal, will use color output
     if sys.stdout.isatty():
         OPTIONS['COLOR'] = True
+
+if OPTIONS['PROGRESS'] is None:
+    OPTIONS['PROGRESS'] = sys.stderr.isatty()
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
