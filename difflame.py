@@ -531,8 +531,12 @@ class DiffHunk:
                 original_line = self.readPorcelainLine(original_file_blame)
                 # what is the _real_ revision where the lines were deleted?
                 self.max_starting_line = starting_line_number
+                if reverse:
+                    deleted_line_number = original_line['final_line']
+                else:
+                    deleted_line_number = original_line['original_line']
                 revision = original_line['revision']
-                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], self.max_starting_line)
+                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], deleted_line_number)
                 # print hint if needed
                 if deletion_revision is None:
                     hunk_line = HunkLine(False, revision, original_line['filename'], original_line['content'])
