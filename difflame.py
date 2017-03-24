@@ -427,9 +427,9 @@ class DiffHunk:
         previous_revision = None
         self.printDescriptorLine()
         for line in self.lines:
-            if OPTIONS['HINTS'] or OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
-                revision_info = get_revision_info(line.revision)
             if isinstance(line, HunkLine):
+                if OPTIONS['HINTS'] or OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL'] or OPTIONS['SHOWDATE']:
+                    revision_info = get_revision_info(line.revision)
                 if OPTIONS['HINTS']:
                     # hints are being printed
                     if line.added is not None:
