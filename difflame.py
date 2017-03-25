@@ -7,6 +7,7 @@
 import subprocess
 import sys
 from time import time
+from datetime import datetime
 
 # color codes
 COLOR_CYAN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x36) + chr(0x6d)
@@ -18,18 +19,67 @@ COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 # general OPTIONS for difflame
 # HINTS: use hints (1-line summary of a revision)
 # COLOR: use color on output
+# SHOWNAME: print name of author
+# SHOWMAIL: print mail of author
+# SHOWDATE: show date
+# PROGRESS: whether to show progress or not
 OPTIONS=dict()
 OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
+OPTIONS['SHOWNAME'] = True
+OPTIONS['SHOWMAIL'] = False
+OPTIONS['SHOWDATE'] = True
+OPTIONS['PROGRESS'] = None
 
 # options used for diff and blame
 DIFF_OPTIONS=[]
 BLAME_OPTIONS=[]
 
+def run_git_command(args):
+    global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
+    """
+    Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
+    """
+    command = ["git"]
+    command.extend(args)
+    if DEBUG_GIT:
+        TOTAL_GIT_EXECUTIONS+=1
+        commandStr=""
+        for word in command:
+            commandStr+=word + " "
+        sys.stderr.write("git execution: " + str(commandStr) + "...")
+        starting_time=time()
+    result = subprocess.check_output(command)
+    if DEBUG_GIT:
+        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
+        sys.stderr.flush()
+    return result
+
+def run_git_blame(arguments):
+    '''
+    Run a git blame command. Will return raw output
+    '''
+    args=["blame", "--no-progress"]
+    if len(BLAME_OPTIONS) > 0:
+        args.extend(BLAME_OPTIONS)
+    args.extend(arguments)
+    return run_git_command(args)
+
+def run_git_diff(arguments):
+    '''
+    Run a git diff command. Will return raw output
+    '''
+    args=["diff"]
+    if len(DIFF_OPTIONS) > 0:
+        args.extend(DIFF_OPTIONS)
+    args.extend(arguments)
+    return run_git_command(args)
 
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
+# shortned revision ID length
+SHORT_REV_LENGTH=len(run_git_command(["log", "--max-count=1", "--pretty=%h", "HEAD"]).split("\n")[0])
 
 # caches
 
@@ -42,8 +92,83 @@ REVISIONS_CACHE=dict()
 # direct parent nodes of each revision
 PARENT_REVISIONS_CACHE=dict() # TODO does it have to be calculated depending on the path that is being analyzed?
 
-# information displayed for each revision on modified lines
+'''
+information displayed for each revision on modified lines
+- shortened-id
+- author
+- author_mail
+- author_time
+- author_tz
+- committer
+- committer_mail
+- committer_time
+- committer_tz
+- summary
+
+use get_revision_info(full-rev-id)
+'''
 REVISIONS_INFO_CACHE=dict()
+
+def get_revision_info(full_id):
+    '''
+    Pull information about a revision
+    
+    if the revision is not present, information will be pulled from git
+    '''
+    if full_id not in REVISIONS_INFO_CACHE:
+        # information was not present.... have to pull it from git
+        values = dict()
+        values['revision'] = full_id
+        output = run_git_command(["cat-file", "-p", full_id]).split("\n")
+        summary_next = False
+        for line in output:
+            if summary_next:
+                # this line is the summary
+                values['summary'] = line
+                break # that's it
+            if len(line) == 0:
+                summary_next = True
+            else:
+                separator_index = line.index(' ')
+                field = line[:separator_index]
+                if field == 'author':
+                    email_start_index = line.index('<')
+                    values['author'] = line[separator_index + 1:email_start_index - 1]
+                    separator_index = line.index('>')
+                    values['author_mail'] = line[email_start_index + 1:separator_index]
+                    temp = line.split(" ")
+                    values['author_time'] = temp[-2]
+                    values['author_tz'] = temp[-1]
+                elif field == 'committer':
+                    email_start_index = line.index('<')
+                    values['committer'] = line[separator_index + 1:email_start_index - 1]
+                    separator_index = line.index('>')
+                    values['committer_mail'] = line[email_start_index + 1:separator_index]
+                    temp = line.split(" ")
+                    values['committer_time'] = temp[-2]
+                    values['committer_tz'] = temp[-1]
+        REVISIONS_INFO_CACHE[full_id] = values
+    return REVISIONS_INFO_CACHE[full_id]
+
+def set_revision_information(full_id, author, author_mail, author_time, author_tz,
+                             committer, committer_mail, committer_time, committer_tz,
+                             summary):
+    '''
+    Save revision information (if it wasn't already saved)
+    '''
+    if full_id not in REVISIONS_INFO_CACHE:
+        values = dict()
+        values['revision'] = full_id
+        values['author'] = author
+        values['author_mail'] = author_mail
+        values['author_time'] = author_time
+        values['author_tz'] = author_tz
+        values['committer'] = committer
+        values['committer_mail'] = committer_mail
+        values['committer_time'] = committer_time
+        values['committer_tz'] = committer_tz
+        values['summary'] = summary
+        REVISIONS_INFO_CACHE[full_id] = values
 
 '''
 caches to save:
@@ -125,7 +250,7 @@ class DiffFileObject:
         file_name = cleanup_filename(file_name)
         
         # starting to build git command arguments
-        git_blame_opts = []
+        git_blame_opts = ["--line-porcelain"]
         
         for hunk_position in hunk_positions:
             hunk_position = hunk_position.split(',')
@@ -153,7 +278,7 @@ class DiffFileObject:
                 git_blame_opts.append(self.final_revision)
         else:
             # reverse blame
-            git_blame_opts.extend(["--reverse", "-s"])
+            git_blame_opts.append("--reverse")
             if reverse_analysis:
                 git_blame_opts.extend([self.final_revision + ".." + self.starting_revision])
             else:
@@ -162,13 +287,22 @@ class DiffFileObject:
         git_blame_opts.extend(["--", file_name])
         return run_git_blame(git_blame_opts)
 
-    def stdoutPrint(self, reverse):
+    def process(self, reverse):
         '''
-        Print the content of the diff for this file (with blame information, the whole package)
+        Process the content of the diff for this file (with blame information, the whole package)
         
         If reverse, "blaming analysis" has to be performed treeish2..treeish1
         '''
         #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
+        original_file_blame = self.getOriginalFileBlame(reverse)
+        final_file_blame = self.getFinalFileBlame(reverse)
+        for hunk in self.hunks:
+            hunk.processHunk(original_file_blame, final_file_blame, reverse)
+    
+    def stdoutPrint(self, reverse, max_name_width, max_mail_width, starting_line_width, final_line_width):
+        '''
+        Print Diff Object
+        '''
         i=0
         while i < len(self.raw_content) and len(self.raw_content[i]) and self.raw_content[i][0] != '@':
             if OPTIONS['COLOR']:
@@ -183,12 +317,64 @@ class DiffFileObject:
             # no hunks.... binary file probably
             return
         
-        # print hunks
-        original_file_blame = self.getOriginalFileBlame(reverse)
-        final_file_blame = self.getFinalFileBlame(reverse)
         for hunk in self.hunks:
-            hunk.stdoutPrint(original_file_blame, final_file_blame, reverse)
-            
+            hunk.printLines(reverse, max_name_width, max_mail_width, starting_line_width, final_line_width)
+    
+    def getMaxNameWidth(self):
+        '''
+        Max width of author name
+        '''
+        max_width = 0
+        for hunk in self.hunks:
+            if hunk.max_author_width > max_width:
+                max_width = hunk.max_author_width
+        return max_width
+
+    def getMaxMailWidth(self):
+        '''
+        Max Mail Width
+        '''
+        max_width = 0
+        for hunk in self.hunks:
+            if hunk.max_mail_width > max_width:
+                max_width = hunk.max_mail_width
+        return max_width
+    
+    def getMaxStartingLine(self):
+        '''
+        Get the maximum original line
+        '''
+        max_line = 0
+        if len(self.hunks) > 0:
+            max_line = self.hunks[-1].max_starting_line
+        return max_line
+    
+    def getMaxFinalLine(self):
+        '''
+        Get the maximum original line
+        '''
+        max_line = 0
+        if len(self.hunks) > 0:
+            max_line = self.hunks[-1].max_final_line
+        return max_line
+        
+    
+class HunkLine:
+    '''
+    Structure to hold information for a line on the hunk:
+    - Added:
+        Whether the line was added (True), removed (False), or left as is (None)
+    - Revision
+    - Filename
+    - Content
+    '''
+    
+    def __init__(self, added, revision, filename, content):
+        self.added = added
+        self.revision = revision
+        self.filename = filename
+        self.content = content
+
 class DiffHunk:
     '''
     Object to hold hunk information
@@ -223,6 +409,79 @@ class DiffHunk:
                 self.content_starting_index = i
                 break
             i+=1
+        
+        self.lines = None
+        
+        self.max_author_width = 0 # maximum width for an author name
+        self.max_mail_width = 0 # max width for an author email
+        # max line number (for formatting)
+        self.max_starting_line = None
+        self.max_final_line = None
+    
+    def printLines(self, reverse, max_author_width, max_mail_width, starting_line_width, final_line_width):
+        '''
+        Print all lines (it will eventually include params to control output width and so on)
+        '''
+        starting_line_number = self.original_file_starting_line
+        final_line_number = self.final_file_starting_line
+        previous_revision = None
+        self.printDescriptorLine()
+        for line in self.lines:
+            if isinstance(line, HunkLine):
+                if OPTIONS['HINTS'] or OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL'] or OPTIONS['SHOWDATE']:
+                    revision_info = get_revision_info(line.revision)
+                if OPTIONS['HINTS']:
+                    # hints are being printed
+                    if line.added is not None:
+                        # line is added or deleted
+                        if previous_revision is None or previous_revision != line.revision:
+                            # have to print the hink
+                            if OPTIONS['COLOR']:
+                                sys.stdout.write(COLOR_WHITE)
+                            sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision_info['summary'])
+                            if OPTIONS['COLOR']:
+                                sys.stdout.write(COLOR_RESET)
+                            print
+                            previous_revision = line.revision
+                    else:
+                        previous_revision = None
+                if line.added is None:
+                    sys.stdout.write(' ')
+                elif not reverse and line.added or reverse and not line.added:
+                    if OPTIONS['COLOR']:
+                        sys.stdout.write(COLOR_GREEN)
+                    sys.stdout.write('+')
+                elif not reverse and not line.added or reverse and line.added:
+                    if OPTIONS['COLOR']:
+                        sys.stdout.write(COLOR_RED)
+                    sys.stdout.write('-')
+                sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
+                if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
+                    sys.stdout.write('(')
+                if OPTIONS['SHOWNAME']:
+                    sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))) + ' ')
+                if OPTIONS['SHOWMAIL']:
+                    sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
+                if OPTIONS['SHOWDATE']:
+                    sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ')
+                if line.added is None or not reverse and not line.added or reverse and line.added:
+                    sys.stdout.write(("%" + str(starting_line_width) + "d") % starting_line_number)
+                    starting_line_number += 1
+                else:
+                    sys.stdout.write(' ' * starting_line_width)
+                sys.stdout.write(' ')
+                if line.added is None or not reverse and line.added or reverse and not line.added:
+                    sys.stdout.write(("%" + str(final_line_width) + "d") % final_line_number)
+                    final_line_number += 1
+                else:
+                    sys.stdout.write(' ' * final_line_width)
+                sys.stdout.write(') ' + line.content)
+                if OPTIONS['COLOR']:
+                    sys.stdout.write(COLOR_RESET)
+                print
+            else:
+                print line
+            sys.stdout.flush()
     
     def printDescriptorLine(self):
         '''
@@ -238,14 +497,13 @@ class DiffHunk:
         else:
             print self.raw_content[0] # hunk descrtiptor line
     
-    def stdoutPrint(self, original_file_blame, final_file_blame, reverse):
+    def processHunk(self, original_file_blame, final_file_blame, reverse):
+        lines = []
         """
-        Print hunk on stdout
-        
-        if doing a reverse blame operation, blaming analysis has to be performed treeish2..treeish1
+        analyze hunk and save its lines
         """
-        self.printDescriptorLine()
-        previous_revision=None
+        starting_line_number = self.original_file_starting_line
+        ending_line_number = self.final_file_starting_line
         if reverse:
             starting_revision = self.diff_file_object.final_revision
             target_revision = self.diff_file_object.starting_revision
@@ -254,112 +512,101 @@ class DiffHunk:
             target_revision = self.diff_file_object.final_revision
         for line in self.raw_content[1:]:
             if line[0] == ' ':
-                # added line (no color) or unchanged line
-                # print line from final blame
-                blame_line = final_file_blame.pop(0)
+                # unchanged line
+                final_line = self.readPorcelainLine(final_file_blame)
                 # move on the original_blame cause we got blame info from final_file_blame
-                original_file_blame.pop(0)
-                # reset previous revision
-                previous_revision=None
-                print line[0] + blame_line
+                original_line = self.readPorcelainLine(original_file_blame)
+                self.max_starting_line = starting_line_number
+                self.max_final_line = ending_line_number
+                lines.append(HunkLine(None, final_line['revision'], final_line['filename'], final_line['content']))
+                starting_line_number += 1
+                ending_line_number += 1
             elif not reverse and line[0] == '+' or reverse and line[0] == '-':
-                blame_line = final_file_blame.pop(0)
-                # have to process revision to see it we need to print hint before the revision
-                current_revision = process_added_line(blame_line)
-                previous_revision = print_revision_line(current_revision, previous_revision, True)
-                # print line from final blame with color adjusted
-                if OPTIONS['COLOR']:
-                    if reverse:
-                        sys.stdout.write(COLOR_RED)
-                    else:
-                        sys.stdout.write(COLOR_GREEN)
-                if reverse:
-                    sys.stdout.write('-')
-                else:
-                    sys.stdout.write('+')
-                sys.stdout.write(blame_line)
-                if OPTIONS['COLOR']:
-                    sys.stdout.write(COLOR_RESET)
-                print ""
+                final_line = self.readPorcelainLine(final_file_blame)
+                self.max_final_line = ending_line_number
+                lines.append(HunkLine(True, final_line['revision'], final_line['filename'], final_line['content']))
+                ending_line_number += 1
             elif not reverse and line[0] == '-' or reverse and line[0] == '+':
                 # it's a line that was deleted so have to pull it from original_blame
-                blame_line = original_file_blame.pop(0)
+                original_line = self.readPorcelainLine(original_file_blame)
                 # what is the _real_ revision where the lines were deleted?
-                deleted_line_number = get_line_number_from_deleted_line(blame_line)
-                revision = get_revision_from_modified_line(blame_line)
-                original_revision = revision # so that we can print the exact text later on if needed
-                revision=get_full_revision_id(revision)
-                deletion_revision = process_deleted_line(starting_revision, target_revision, cleanup_filename(self.diff_file_object.original_name), deleted_line_number)
+                self.max_starting_line = starting_line_number
+                if reverse:
+                    deleted_line_number = original_line['final_line']
+                else:
+                    deleted_line_number = original_line['original_line']
+                revision = original_line['revision']
+                deletion_revision = process_deleted_line(starting_revision, target_revision, original_line['filename'], deleted_line_number)
                 # print hint if needed
                 if deletion_revision is None:
-                    print_revision_line(revision, previous_revision, False)
+                    hunk_line = HunkLine(False, revision, original_line['filename'], original_line['content'])
                 else:
-                    print_revision_line(deletion_revision, previous_revision, False)
-                # do we have the filename?
-                revision_info_fields = filter(None, blame_line[:blame_line.find(')')].split(" "))
-                filename = None
-                if len(revision_info_fields) == 3: # filename is included in output
-                    filename = revision_info_fields[1]
-                # got the revision where the line was deleted... let's show it
-                if deletion_revision is None:
-                    print_deleted_revision_info(revision, filename, reverse, False)
-                else:
-                    print_deleted_revision_info(deletion_revision, filename, reverse)
-                # line number and content
-                sys.stdout.write(" " + str(get_line_number_from_deleted_line(blame_line)) + blame_line[blame_line.find(')'):])
-                if OPTIONS['COLOR']:
-                    sys.stdout.write(COLOR_RESET)
-                if deletion_revision is None:
-                    previous_revision = revision
-                else:
-                    previous_revision = deletion_revision
-                print ""
-            elif line[0]=='\\':
-                # print original line, nothing is added
-                print line
-                # reset previous revision
-                previous_revision=None
-    
-    # done printing the hunk
-def run_git_command(args):
-    global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
-    """
-    Run a git command. If there is an error, will throw an exception. Otherwise, output will be returned
-    """
-    command = ["git"]
-    command.extend(args)
-    if DEBUG_GIT:
-        TOTAL_GIT_EXECUTIONS+=1
-        commandStr=""
-        for word in command:
-            commandStr+=word + " "
-        sys.stderr.write("git execution: " + str(commandStr) + "...")
-        starting_time=time()
-    result = subprocess.check_output(command)
-    if DEBUG_GIT:
-        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
-        sys.stderr.flush()
-    return result
+                    hunk_line = HunkLine(False, deletion_revision, original_line['filename'], original_line['content'])
+                lines.append(hunk_line)
+                starting_line_number += 1
+            if line[0]=='\\':
+                lines.append(line)
+            else:
+                # HunkLine is already in
+                if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
+                    revision_info = get_revision_info(lines[-1].revision)
+                    author_width = len(revision_info['author'].decode('utf-8'))
+                    mail_width = len(revision_info['author_mail'])
+                    if author_width > self.max_author_width:
+                        self.max_author_width = author_width
+                    if mail_width > self.max_mail_width:
+                        self.max_mail_width = mail_width
+        
+        self.lines = lines
 
-def run_git_blame(arguments):
-    '''
-    Run a git blame command. Will return raw output
-    '''
-    args=["blame", "--no-progress"]
-    if len(BLAME_OPTIONS) > 0:
-        args.extend(BLAME_OPTIONS)
-    args.extend(arguments)
-    return run_git_command(args)
-
-def run_git_diff(arguments):
-    '''
-    Run a git diff command. Will return raw output
-    '''
-    args=["diff"]
-    if len(DIFF_OPTIONS) > 0:
-        args.extend(DIFF_OPTIONS)
-    args.extend(arguments)
-    return run_git_command(args)
+    def readPorcelainLine(self, porcelainOutput):
+        '''
+        Read the content of a blame --line-porcelain.
+        Will return a dict with the following keys:
+        - revision (full ID)
+        - original_line
+        - final_line
+        - author
+        - author-mail
+        - author-time
+        - author-tz
+        - committer
+        - committer-mail
+        - committer-time
+        - committer-tz
+        - summary
+        - previous
+        - filename
+        - boundary (True, False)
+        - content
+        '''
+        values = dict()
+        temp = porcelainOutput.pop(0).split(" ")
+        values['revision'] = temp[0]
+        values['original_line'] = int(temp[1])
+        values['final_line'] = int(temp[2])
+        values['boundary'] = False
+        
+        while True:
+            line = porcelainOutput.pop(0)
+            if line[0] == '\t':
+                # content line
+                values['content'] = line[1:]
+                break
+            else:
+                if line == 'boundary':
+                    values['boundary'] = True
+                    continue
+                separator = line.index(' ')
+                field = line[:separator]
+                value = line[separator + 1:]
+                values[field] = value
+        
+        # save in cache if we don't have information about the revision yet
+        set_revision_information(values['revision'], values['author'], values['author-mail'][1:-1], values['author-time'], values['author-tz'],
+                             values['committer'], values['committer-mail'][1:-1], values['committer-time'], values['committer-tz'],
+                             values['summary'])
+        return values
 
 def git_revision_hint(revision):
     """
@@ -621,39 +868,6 @@ def process_deleted_line(starting_revision, target_revision, original_filename, 
     # if we reached this point, we ran out of parents... this is the culprit revision
     return revision
     
-def print_deleted_revision_info(revision_id, filename, reverse, found_revision = True):
-    """
-    Print revision information for a deleled line
-    
-    if filename is provided, have to include the name of the file
-    
-    reverse implies that the analysis is being performed treeish2..treeish1
-    
-    if _not_ found_revision then revision is taken directly from blame --reverse
-    """
-    info = None
-    if revision_id in REVISIONS_INFO_CACHE:
-        info = REVISIONS_INFO_CACHE[revision_id]
-    else:
-        info = run_git_command(["show", "--pretty=%h (%an %ai", revision_id]).split("\n")[0]
-        REVISIONS_INFO_CACHE[revision_id] = info
-    if OPTIONS['COLOR']:
-        if reverse:
-            sys.stdout.write(COLOR_GREEN)
-        else:
-            sys.stdout.write(COLOR_RED)
-    if found_revision:
-        if reverse:
-            sys.stdout.write("+")
-        else:
-            sys.stdout.write("-")
-    else:
-        sys.stdout.write("%")
-    sys.stdout.write(info[:info.index(' ') + 1])
-    if filename is not None:
-        sys.stdout.write(filename + " ")
-    sys.stdout.write(info[info.index(' ') + 1:])
-
 def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish2):
     """
     process diff output
@@ -724,7 +938,15 @@ def process_diff_output(output, treeish1, treeish2):
     if merge_base == treeish2:
         reverse = True
     
+    diff_file_objects = []
+    max_name_width = 0
+    max_mail_width = 0
+    max_starting_line = 0
+    max_final_line = 0
     while i < len(lines):
+        if OPTIONS['PROGRESS']:
+            sys.stderr.write(chr(13) + "Processing line " + str(i) + "/" + str(len(lines)))
+            sys.stderr.flush()
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
@@ -732,7 +954,26 @@ def process_diff_output(output, treeish1, treeish2):
         BLAMED_FILES_CACHE=dict()
         DIFF_FILES_CACHE=dict()
         (diff_file_object, i) = process_file_from_diff_output(lines, i, treeish1, treeish2)
-        diff_file_object.stdoutPrint(reverse)
+        diff_file_object.process(reverse)
+        temp = diff_file_object.getMaxNameWidth()
+        if temp > max_name_width:
+            max_name_width = temp
+        temp = diff_file_object.getMaxMailWidth()
+        if temp > max_mail_width:
+            max_mail_width = temp
+        temp = diff_file_object.getMaxStartingLine()
+        if temp > max_starting_line:
+            max_starting_line = temp
+        temp = diff_file_object.getMaxFinalLine()
+        if temp > max_final_line:
+            max_final_line = temp
+        diff_file_objects.append(diff_file_object)
+    
+    if OPTIONS['PROGRESS']:
+        sys.stderr.write(chr(13) + "Processing line " + str(len(lines)) + "/" + str(len(lines)) + "\n")
+    
+    for diff_file_object in diff_file_objects:
+        diff_file_object.stdoutPrint(reverse, max_name_width, max_mail_width, len(str(max_starting_line)), len(str(max_final_line)))
 
 # parameters
 treeish1=None
@@ -765,7 +1006,16 @@ for param in sys.argv[1:]:
                     diff_param=param[param.index('=') + 1:]
                     DIFF_OPTIONS.append(diff_param)
                 elif param.startswith("--blame-param=") or param.startswith("-bp="):
-                    BLAME_OPTIONS.append(param[param.index('=') + 1:])
+                    blame_param = param[param.index('=') + 1:]
+                    if blame_param == "-e":
+                        OPTIONS['SHOWNAME'] = False
+                        OPTIONS['SHOWMAIL'] = True
+                    elif blame_param == "-s":
+                        OPTIONS['SHOWNAME'] = False
+                        OPTIONS['SHOWMAIL'] = False
+                        OPTIONS['SHOWDATE'] = False
+                    else:
+                        BLAME_OPTIONS.append()
                 elif param in ["--tips", "--hints"]:
                     # Will support them but they are unnecessary
                     continue
@@ -773,12 +1023,23 @@ for param in sys.argv[1:]:
                     OPTIONS['HINTS'] = False
                 elif param == "--git-debug":
                     DEBUG_GIT = True
+                elif param == "--progress":
+                    OPTIONS['PROGRESS'] = True
+                elif param == "--no-progress":
+                    OPTIONS['PROGRESS'] = False
                 else:
                     sys.stderr.write("Couldn't process option <<" + param + ">>\n")
         elif param == "-w":
             # avoid space changes
             BLAME_OPTIONS.append(param)
             DIFF_OPTIONS.append(param)
+        elif param == "-e":
+            OPTIONS['SHOWNAME'] = False
+            OPTIONS['SHOWMAIL'] = True
+        elif param == "-s":
+            OPTIONS['SHOWNAME'] = False
+            OPTIONS['SHOWMAIL'] = False
+            OPTIONS['SHOWDATE'] = False
         else:
             # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
             if treeish1 is not None:
@@ -802,6 +1063,9 @@ if not color_set:
     # if the user is using a terminal, will use color output
     if sys.stdout.isatty():
         OPTIONS['COLOR'] = True
+
+if OPTIONS['PROGRESS'] is None:
+    OPTIONS['PROGRESS'] = sys.stderr.isatty()
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
