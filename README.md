@@ -1,18 +1,18 @@
-#difflame
+# difflame
 
-##Licensing
+## Licensing
 Copyright 2017 Edmundo Carmona Antoranz  
 Released under the terms of GPLv2
 
 
-##Keywords
+## Keywords
 git diff blame
 
-##Description
+## Description
 Show the output of git diff with the additional information of git blame for
 added/removed lines so that it's 'trivial' to find out who did what.
 
-##Output Format
+## Output Format
 Lines that remain the same or that were added will indicate when those lines
 were *added* to the file.
 Lines that were removed will display the revision where the line was removed.
@@ -55,7 +55,7 @@ relate to the same revision. This is so that it's possible to get a little more
 information about the revision itself without having to resort to an additional
 call to git show.
 
-##Parameters
+## Parameters
 You can provide one or two *treeishs*. If you provide only one, __HEAD__ will be
 assumed to be the second treeish.
 
@@ -70,7 +70,7 @@ Parameters can be sent to `git blame` by using option __--blame-param__ (or __-b
 example: `--blame-param=-l` `-bp=-t`
 Multiple parameters are possible, each one having a separate __--blame-param/-bp__:
 
-##Options
+## Options
 __--color/--no-color__: output with/without color.
 If user doesn't specify --color/--no-color options then output will use
 color if process is connected to a terminal
