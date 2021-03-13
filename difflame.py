@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 # tool to see who introduced changes on files
 # Copyright Edmundo Carmona Antoranz 2017
@@ -53,7 +53,7 @@ def run_git_command(args):
     if DEBUG_GIT:
         sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
         sys.stderr.flush()
-    return result
+    return result.decode("utf-8")
 
 def run_git_blame(arguments):
     '''
@@ -78,7 +78,7 @@ def run_git_diff(arguments):
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
-# shortned revision ID length
+# shortened revision ID length
 SHORT_REV_LENGTH=len(run_git_command(["log", "--max-count=1", "--pretty=%h", "HEAD"]).split("\n")[0])
 
 # caches
@@ -314,7 +314,7 @@ class DiffFileObject:
             sys.stdout.write(self.raw_content[i])
             if OPTIONS['COLOR']:
                 sys.stdout.write(COLOR_RESET)
-            print ""
+            print("")
             i+=1
         
         if len(self.hunks) == 0:
@@ -445,7 +445,7 @@ class DiffHunk:
                             sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision_info['summary'])
                             if OPTIONS['COLOR']:
                                 sys.stdout.write(COLOR_RESET)
-                            print
+                            sys.stdout.write("\n")
                             previous_revision = line.revision
                     else:
                         previous_revision = None
@@ -463,7 +463,7 @@ class DiffHunk:
                 if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
                     sys.stdout.write('(')
                 if OPTIONS['SHOWNAME']:
-                    sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author'].decode('utf-8')))) + ' ')
+                    sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author']))) + ' ')
                 if OPTIONS['SHOWMAIL']:
                     sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
                 if OPTIONS['SHOWDATE']:
@@ -482,9 +482,9 @@ class DiffHunk:
                 sys.stdout.write(') ' + line.content)
                 if OPTIONS['COLOR']:
                     sys.stdout.write(COLOR_RESET)
-                print
+                print()
             else:
-                print line
+                print(line)
             sys.stdout.flush()
     
     def printDescriptorLine(self):
@@ -497,9 +497,9 @@ class DiffHunk:
             sys.stdout.write(self.raw_content[0][:index_of_separation + 2])
             sys.stdout.write(COLOR_RESET)
             sys.stdout.write(self.raw_content[0][index_of_separation+2:])
-            print ""
+            print("")
         else:
-            print self.raw_content[0] # hunk descrtiptor line
+            print(self.raw_content[0]) # hunk descriptor line
     
     def processHunk(self, original_file_blame, final_file_blame, reverse):
         lines = []
@@ -554,7 +554,7 @@ class DiffHunk:
                 # HunkLine is already in
                 if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
                     revision_info = get_revision_info(lines[-1].revision)
-                    author_width = len(revision_info['author'].decode('utf-8'))
+                    author_width = len(revision_info['author'])
                     mail_width = len(revision_info['author_mail'])
                     if author_width > self.max_author_width:
                         self.max_author_width = author_width
@@ -631,7 +631,7 @@ def get_full_revision_id(revision):
         # we already had the revision
         return REVISIONS_ID_CACHE[revision]
     # fallback to get it from git
-    full_revision = run_git_command(["rev-list", "--max-count=1", revision]).split("\n")[0]
+    full_revision = run_git_command(["rev-parse", revision]).split("\n")[0]
     REVISIONS_ID_CACHE[revision] = full_revision
     return full_revision
 
@@ -649,7 +649,7 @@ def get_revisions(treeish1, treeish2, filename = None):
             output=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2])
         else:
             output=run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", filename])
-        REVISIONS_CACHE[treeish1][treeish2][filename] = filter(None, output.split("\n"))
+        REVISIONS_CACHE[treeish1][treeish2][filename] = output.split("\n")
     return REVISIONS_CACHE[treeish1][treeish2][filename]
 
 def cleanup_filename(filename):
@@ -745,7 +745,7 @@ def print_revision_line(current_revision, previous_revision, adding_line):
     sys.stdout.write(hint)
     if OPTIONS['COLOR']:
         sys.stdout.write(COLOR_RESET)
-    print ""
+    print("")
     
     return current_revision
 
@@ -1093,7 +1093,7 @@ try:
         
     diff_output = run_git_command(git_diff_params)
 except:
-    print "there was an error running git"
+    print("there was an error running git")
     import traceback
     traceback.print_exc()
     sys.exit(1)
