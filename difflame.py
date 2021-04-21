@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 # tool to see who introduced changes on files
 # Copyright Edmundo Carmona Antoranz 2017
