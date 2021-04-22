@@ -348,18 +348,22 @@ class DiffFileObject:
         '''
         Get the maximum original line
         '''
-        max_line = 0
+        max_line = None
         if len(self.hunks) > 0:
             max_line = self.hunks[-1].max_starting_line
+        if max_line is None:
+            max_line = 0
         return max_line
     
     def getMaxFinalLine(self):
         '''
         Get the maximum original line
         '''
-        max_line = 0
+        max_line = None
         if len(self.hunks) > 0:
             max_line = self.hunks[-1].max_final_line
+        if max_line is None:
+            max_line = 0
         return max_line
         
     
@@ -966,8 +970,6 @@ def process_diff_output(output, treeish1, treeish2):
         if temp > max_mail_width:
             max_mail_width = temp
         temp = diff_file_object.getMaxStartingLine()
-        if temp is None:
-            temp = 0
         if temp > max_starting_line:
             max_starting_line = temp
         temp = diff_file_object.getMaxFinalLine()
