@@ -966,6 +966,8 @@ def process_diff_output(output, treeish1, treeish2):
         if temp > max_mail_width:
             max_mail_width = temp
         temp = diff_file_object.getMaxStartingLine()
+        if temp is None:
+            temp = 0
         if temp > max_starting_line:
             max_starting_line = temp
         temp = diff_file_object.getMaxFinalLine()
