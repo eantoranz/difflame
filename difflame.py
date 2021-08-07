@@ -214,6 +214,7 @@ class DiffFileObject:
         self.hunks = hunks # DiffHunk instances
         self.original_hunk_positions = original_hunk_positions
         self.final_hunk_positions = final_hunk_positions
+        self.is_binary = self.raw_content[-1].find("Binary files") == 0
         
         # let's make hunks point to this diff instance
         for hunk in hunks:
@@ -297,6 +298,9 @@ class DiffFileObject:
         
         If reverse, "blaming analysis" has to be performed treeish2..treeish1
         '''
+        if self.is_binary:
+            # not much to do here
+            return
         #Will print starting lines until we hit a starting @ or the content of the diff is finished (no hunks reported)
         original_file_blame = self.getOriginalFileBlame(reverse)
         final_file_blame = self.getFinalFileBlame(reverse)
@@ -307,6 +311,14 @@ class DiffFileObject:
         '''
         Print Diff Object
         '''
+        if self.is_binary:
+            # let's print the raw content
+            for line in self.raw_content:
+                sys.stdout.write(line)
+                sys.stdout.write("\n")
+            sys.stdout.flush()
+            return
+                
         i=0
         while i < len(self.raw_content) and len(self.raw_content[i]) and self.raw_content[i][0] != '@':
             if OPTIONS['COLOR']:
