@@ -1159,8 +1159,7 @@ if DEBUG_GIT:
 
 sys.stderr.flush()
 OUTPUT.flush()
-if PAGER_PROCESS is None:
-    OUTPUT.close()
-else:
+OUTPUT.close()
+if PAGER_PROCESS is not None:
     PAGER_PROCESS.wait()
 sys.stderr.close()
