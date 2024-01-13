@@ -4,10 +4,12 @@
 # Copyright Edmundo Carmona Antoranz 2017
 # Released under the terms of GPLv2
 
+import argparse
 import subprocess
 import sys
-from time import time
+import traceback
 from datetime import datetime
+from time import time
 
 # color codes
 COLOR_CYAN=chr(0x1b) + chr(0x5b) + chr(0x33) + chr(0x36) + chr(0x6d)
@@ -23,6 +25,7 @@ COLOR_RESET=chr(0x1b) + chr(0x5b) + chr(0x6d)
 # SHOWMAIL: print mail of author
 # SHOWDATE: show date
 # PROGRESS: whether to show progress or not
+# PAGER: use pager (if not specified, will use pager if running on a terminal)
 OPTIONS=dict()
 OPTIONS['HINTS']=True # hints by default
 OPTIONS['COLOR']=False
@@ -30,10 +33,20 @@ OPTIONS['SHOWNAME'] = True
 OPTIONS['SHOWMAIL'] = False
 OPTIONS['SHOWDATE'] = True
 OPTIONS['PROGRESS'] = None
+OPTIONS['PAGER'] = None
 
 # options used for diff and blame
 DIFF_OPTIONS=[]
 BLAME_OPTIONS=[]
+
+OUTPUT = sys.stdout
+PAGER_PROCESS = None # process if using pager
+
+def writeOutput(something_to_write: str) -> None:
+    if PAGER_PROCESS is None:
+        OUTPUT.write(something_to_write)
+    else:
+        OUTPUT.write(something_to_write.encode())
 
 def run_git_command(args):
     global DEBUG_GIT, TOTAL_GIT_EXECUTIONS
@@ -314,19 +327,19 @@ class DiffFileObject:
         if self.is_binary:
             # let's print the raw content
             for line in self.raw_content:
-                sys.stdout.write(line)
-                sys.stdout.write("\n")
-            sys.stdout.flush()
+                writeOutput(line)
+                writeOutput("\n")
+            OUTPUT.flush()
             return
                 
         i=0
         while i < len(self.raw_content) and len(self.raw_content[i]) and self.raw_content[i][0] != '@':
             if OPTIONS['COLOR']:
-                sys.stdout.write(COLOR_WHITE)
-            sys.stdout.write(self.raw_content[i])
+                writeOutput(COLOR_WHITE)
+            writeOutput(self.raw_content[i])
             if OPTIONS['COLOR']:
-                sys.stdout.write(COLOR_RESET)
-            print("")
+                writeOutput(COLOR_RESET)
+            writeOutput("\n")
             i+=1
         
         if len(self.hunks) == 0:
@@ -457,66 +470,66 @@ class DiffHunk:
                         if previous_revision is None or previous_revision != line.revision:
                             # have to print the hink
                             if OPTIONS['COLOR']:
-                                sys.stdout.write(COLOR_WHITE)
-                            sys.stdout.write("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision_info['summary'])
+                                writeOutput(COLOR_WHITE)
+                            writeOutput("\t" + line.revision[:SHORT_REV_LENGTH] + ": " + revision_info['summary'])
                             if OPTIONS['COLOR']:
-                                sys.stdout.write(COLOR_RESET)
-                            sys.stdout.write("\n")
+                                writeOutput(COLOR_RESET)
+                            writeOutput("\n")
                             previous_revision = line.revision
                     else:
                         previous_revision = None
                 if line.added is None:
-                    sys.stdout.write(' ')
+                    writeOutput(' ')
                 elif not reverse and line.added or reverse and not line.added:
                     if OPTIONS['COLOR']:
-                        sys.stdout.write(COLOR_GREEN)
-                    sys.stdout.write('+')
+                        writeOutput(COLOR_GREEN)
+                    writeOutput('+')
                 elif not reverse and not line.added or reverse and line.added:
                     if OPTIONS['COLOR']:
-                        sys.stdout.write(COLOR_RED)
-                    sys.stdout.write('-')
-                sys.stdout.write(line.revision[:SHORT_REV_LENGTH] + ' ')
+                        writeOutput(COLOR_RED)
+                    writeOutput('-')
+                writeOutput(line.revision[:SHORT_REV_LENGTH] + ' ')
                 if OPTIONS['SHOWNAME'] or OPTIONS['SHOWMAIL']:
-                    sys.stdout.write('(')
+                    writeOutput('(')
                 if OPTIONS['SHOWNAME']:
-                    sys.stdout.write(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author']))) + ' ')
+                    writeOutput(revision_info['author'] + (' ' * (max_author_width - len(revision_info['author']))) + ' ')
                 if OPTIONS['SHOWMAIL']:
-                    sys.stdout.write('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
+                    writeOutput('<' + revision_info['author_mail'] + '>' + (' ' * (max_mail_width - len(revision_info['author_mail']))) + ' ')
                 if OPTIONS['SHOWDATE']:
-                    sys.stdout.write(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ')
+                    writeOutput(str(datetime.fromtimestamp(int(revision_info['author_time']))) + ' ')
                 if line.added is None or not reverse and not line.added or reverse and line.added:
-                    sys.stdout.write(("%" + str(starting_line_width) + "d") % starting_line_number)
+                    writeOutput(("%" + str(starting_line_width) + "d") % starting_line_number)
                     starting_line_number += 1
                 else:
-                    sys.stdout.write(' ' * starting_line_width)
-                sys.stdout.write(' ')
+                    writeOutput(' ' * starting_line_width)
+                writeOutput(' ')
                 if line.added is None or not reverse and line.added or reverse and not line.added:
-                    sys.stdout.write(("%" + str(final_line_width) + "d") % final_line_number)
+                    writeOutput(("%" + str(final_line_width) + "d") % final_line_number)
                     final_line_number += 1
                 else:
-                    sys.stdout.write(' ' * final_line_width)
-                sys.stdout.write(') ' + line.content)
+                    writeOutput(' ' * final_line_width)
+                writeOutput(') ' + line.content)
                 if OPTIONS['COLOR']:
-                    sys.stdout.write(COLOR_RESET)
-                print()
+                    writeOutput(COLOR_RESET)
             else:
-                print(line)
-            sys.stdout.flush()
+                writeOutput(line)
+            writeOutput("\n")
+            OUTPUT.flush()
     
     def printDescriptorLine(self):
         '''
         Print hunk description line
         '''
         if OPTIONS['COLOR']:
-            sys.stdout.write(COLOR_CYAN)
+            writeOutput(COLOR_CYAN)
             index_of_separation = self.raw_content[0].index('@@', 2)
-            sys.stdout.write(self.raw_content[0][:index_of_separation + 2])
-            sys.stdout.write(COLOR_RESET)
-            sys.stdout.write(self.raw_content[0][index_of_separation+2:])
-            print("")
+            writeOutput(self.raw_content[0][:index_of_separation + 2])
+            writeOutput(COLOR_RESET)
+            writeOutput(self.raw_content[0][index_of_separation+2:])
         else:
-            print(self.raw_content[0]) # hunk descriptor line
-    
+            writeOutput(self.raw_content[0]) # hunk descriptor line
+        writeOutput("\n")
+
     def processHunk(self, original_file_blame, final_file_blame, reverse):
         lines = []
         """
@@ -755,13 +768,13 @@ def print_revision_line(current_revision, previous_revision, adding_line):
         HINTS[current_revision]=hint
     else:
         hint=HINTS[current_revision]
-    sys.stdout.write("\t")
+    writeOutput("\t")
     if OPTIONS['COLOR']:
-        sys.stdout.write(COLOR_WHITE)
-    sys.stdout.write(hint)
+        writeOutput(COLOR_WHITE)
+    writeOutput(hint)
     if OPTIONS['COLOR']:
-        sys.stdout.write(COLOR_RESET)
-    print("")
+        writeOutput(COLOR_RESET)
+    writeOutput("\n")
     
     return current_revision
 
@@ -1008,75 +1021,89 @@ for param in sys.argv[1:]:
     if double_dash:
         # it's a file path
         paths.append(param)
+        continue
+    # haven't found the double dash yet
+    if param.startswith('--') or param.startswith("-dp=") or param.startswith("-bp="):
+        # double dash or parameter
+        if (len(param) == 2):
+            # it's a --
+            double_dash=True
+            continue
+        if param in ["--color", "--no-color"]:
+            # set up color output forcibly
+            OPTIONS['COLOR'] = (param == "--color")
+            color_set=True
+            continue
+        # is it a diff param or a blame param?
+        if param.startswith("--diff-param=") or param.startswith("-dp="):
+            # diff param
+            diff_param=param[param.index('=') + 1:]
+            DIFF_OPTIONS.append(diff_param)
+            continue
+        if param.startswith("--blame-param=") or param.startswith("-bp="):
+            blame_param = param[param.index('=') + 1:]
+            if blame_param == "-e":
+                OPTIONS['SHOWNAME'] = False
+                OPTIONS['SHOWMAIL'] = True
+            elif blame_param == "-s":
+                OPTIONS['SHOWNAME'] = False
+                OPTIONS['SHOWMAIL'] = False
+                OPTIONS['SHOWDATE'] = False
+            else:
+                BLAME_OPTIONS.append()
+            continue
+        if param in ["--tips", "--hints"]:
+            # Will support them but they are unnecessary
+            continue
+        if param == "--no-hints":
+            OPTIONS['HINTS'] = False
+            continue
+        if param == "--git-debug":
+            DEBUG_GIT = True
+            continue
+        if param == "--progress":
+            OPTIONS['PROGRESS'] = True
+            continue
+        if param == "--no-progress":
+            OPTIONS['PROGRESS'] = False
+            continue
+        if param in ["--pager", "--no-pager" ]:
+            if OPTIONS['PAGER'] is not None:
+                sys.stderr.write("Use of pager has already been set\n")
+                continue
+            OPTIONS['PAGER'] = param == "--pager"
+            continue
+        sys.stderr.write("Couldn't process option <<" + param + ">>\n")
+    if param == "-w":
+        # avoid space changes
+        BLAME_OPTIONS.append(param)
+        DIFF_OPTIONS.append(param)
+        continue
+    if param == "-e":
+        OPTIONS['SHOWNAME'] = False
+        OPTIONS['SHOWMAIL'] = True
+        continue
+    if param == "-s":
+        OPTIONS['SHOWNAME'] = False
+        OPTIONS['SHOWMAIL'] = False
+        OPTIONS['SHOWDATE'] = False
+        continue
+    # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
+    if treeish1 is not None:
+        # already had 2 treeishes set up
+        raise Exception("Already have 2 treeishes to work on: " + treeish1 + ".." + treeish2)
+    double_dot_index=param.find('..')
+    if double_dot_index==-1:
+        # single treeish
+        treeish1=treeish2
+        treeish2=get_full_revision_id(param)
     else:
-        # haven't found the double dash yet
-        if param.startswith('--') or param.startswith("-dp=") or param.startswith("-bp="):
-            # double dash or parameter
-            if (len(param) == 2):
-                # it's a --
-                double_dash=True
-            else:
-                if param in ["--color", "--no-color"]:
-                    # set up color output forcibly
-                    OPTIONS['COLOR'] = (param == "--color")
-                    color_set=True
-                # is it a diff param or a blame param?
-                elif param.startswith("--diff-param=") or param.startswith("-dp="):
-                    # diff param
-                    diff_param=param[param.index('=') + 1:]
-                    DIFF_OPTIONS.append(diff_param)
-                elif param.startswith("--blame-param=") or param.startswith("-bp="):
-                    blame_param = param[param.index('=') + 1:]
-                    if blame_param == "-e":
-                        OPTIONS['SHOWNAME'] = False
-                        OPTIONS['SHOWMAIL'] = True
-                    elif blame_param == "-s":
-                        OPTIONS['SHOWNAME'] = False
-                        OPTIONS['SHOWMAIL'] = False
-                        OPTIONS['SHOWDATE'] = False
-                    else:
-                        BLAME_OPTIONS.append()
-                elif param in ["--tips", "--hints"]:
-                    # Will support them but they are unnecessary
-                    continue
-                elif param == "--no-hints":
-                    OPTIONS['HINTS'] = False
-                elif param == "--git-debug":
-                    DEBUG_GIT = True
-                elif param == "--progress":
-                    OPTIONS['PROGRESS'] = True
-                elif param == "--no-progress":
-                    OPTIONS['PROGRESS'] = False
-                else:
-                    sys.stderr.write("Couldn't process option <<" + param + ">>\n")
-        elif param == "-w":
-            # avoid space changes
-            BLAME_OPTIONS.append(param)
-            DIFF_OPTIONS.append(param)
-        elif param == "-e":
-            OPTIONS['SHOWNAME'] = False
-            OPTIONS['SHOWMAIL'] = True
-        elif param == "-s":
-            OPTIONS['SHOWNAME'] = False
-            OPTIONS['SHOWMAIL'] = False
-            OPTIONS['SHOWDATE'] = False
-        else:
-            # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
-            if treeish1 is not None:
-                # already had 2 treeishes set up
-                raise Exception("Already have 2 treeishes to work on: " + treeish1 + ".." + treeish2)
-            double_dot_index=param.find('..')
-            if double_dot_index==-1:
-                # single treeish
-                treeish1=treeish2
-                treeish2=get_full_revision_id(param)
-            else:
-                # passing both treeishes in a single shot
-                if treeish2 is not None:
-                    # already had at least a treeish set up
-                    raise Exception("Already had at least a treeish to work on defined: " + treeish2)
-                treeish1=get_full_revision_id(param[0:double_dot_index])
-                treeish2=get_full_revision_id(param[double_dot_index+2:])
+        # passing both treeishes in a single shot
+        if treeish2 is not None:
+            # already had at least a treeish set up
+            raise Exception("Already had at least a treeish to work on defined: " + treeish2)
+        treeish1=get_full_revision_id(param[0:double_dot_index])
+        treeish2=get_full_revision_id(param[double_dot_index+2:])
                 
 
 if not color_set:
@@ -1086,6 +1113,13 @@ if not color_set:
 
 if OPTIONS['PROGRESS'] is None:
     OPTIONS['PROGRESS'] = sys.stderr.isatty()
+
+# pager
+if OPTIONS['PAGER'] is None:
+    OPTIONS['PAGER'] = sys.stdout.isatty()
+if OPTIONS['PAGER']:
+    PAGER_PROCESS = subprocess.Popen(["less"], stdin=subprocess.PIPE)
+    OUTPUT = PAGER_PROCESS.stdin
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
@@ -1109,8 +1143,8 @@ try:
         
     diff_output = run_git_command(git_diff_params)
 except:
-    print("there was an error running git")
-    import traceback
+    writeOutput("there was an error running git\n")
+    OUTPUT.flush()
     traceback.print_exc()
     sys.exit(1)
 
@@ -1121,6 +1155,9 @@ if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
 
 sys.stderr.flush()
+OUTPUT.flush()
+if PAGER_PROCESS is None:
+    OUTPUT.close()
+else:
+    PAGER_PROCESS.wait()
 sys.stderr.close()
-sys.stdout.flush()
-sys.stdout.close()
