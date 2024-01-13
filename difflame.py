@@ -1118,7 +1118,10 @@ if OPTIONS['PROGRESS'] is None:
 if OPTIONS['PAGER'] is None:
     OPTIONS['PAGER'] = sys.stdout.isatty()
 if OPTIONS['PAGER']:
-    PAGER_PROCESS = subprocess.Popen(["less"], stdin=subprocess.PIPE)
+    pager_args = ["less"]
+    if OPTIONS["COLOR"]:
+        pager_args.append("-R")
+    PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
     OUTPUT = PAGER_PROCESS.stdin
 
 # if there's not at least a treeish, we can't proceed
