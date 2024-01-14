@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 # tool to see who introduced changes on files
-# Copyright Edmundo Carmona Antoranz 2017
+# Copyright (c) Edmundo Carmona Antoranz 2017-2034
 # Released under the terms of GPLv2
 
 import argparse
