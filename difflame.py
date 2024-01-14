@@ -1121,8 +1121,13 @@ if OPTIONS['PAGER']:
     pager_args = ["less"]
     if OPTIONS["COLOR"]:
         pager_args.append("-R")
-    PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
-    OUTPUT = PAGER_PROCESS.stdin
+    try:
+        PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
+        OUTPUT = PAGER_PROCESS.stdin
+    except Exception as e:
+        # could not start pager
+        sys.stderr.write(f"Could not start pager: {e}\n")
+        PAGER_PROCESS = None
 
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
