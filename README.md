@@ -23,7 +23,7 @@ the prefix of the deleted line (instead of the usual -).
 
 Example output (from difflame project itself, two revisions apart):
 ```
-$ ./difflame.py c4dae4fdd8ba883 97d230ce523
+$ ./difflame c4dae4fdd8ba883 97d230ce523
 diff --git a/difflame.py b/difflame.py
 index ff65112..ec21fcd 100755
 --- a/difflame.py
