@@ -76,7 +76,10 @@ def run_git_blame(arguments):
     if len(BLAME_OPTIONS) > 0:
         args.extend(BLAME_OPTIONS)
     args.extend(arguments)
-    return run_git_command(args)
+    try:
+        return run_git_command(args)
+    except subprocess.CalledProcessError:
+        return ""
 
 def run_git_diff(arguments):
     '''
