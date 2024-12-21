@@ -5,6 +5,7 @@
 # Released under the terms of GPLv2
 
 import argparse
+import re
 import subprocess
 import sys
 import traceback
@@ -910,18 +911,26 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     Will return a tuple:
         (DiffFileObject corresponding to the file, position (index of line) of next file in diff outtput)
     """
+
+    def get_filenames(filenames_line):
+        """
+        Will return a tuple with the 2 filenames
+        """
+        diff_match = re.fullmatch("diff --git a/(.*) b/(.*)", filenames_line)
+        if diff_match:
+            return diff_match[1], diff_match[2]
+        raise Exception(f"Could not get filenames in diff line: {filenames_line}")
+
     # First is a 'diff' line
     raw_content = []
     i=starting_line
-    diff_line = output_lines[i].split()
+    diff_line = output_lines[i]
     if len(diff_line) == 0:
         # probably no difference
         return (None, starting_line)
-    if diff_line[0] != "diff":
-        raise Exception("Doesn't seem to exist a 'diff' line at line " + str(i + 1) + ": " + output_lines[i])
-    original_name = diff_line[2]
-    final_name = diff_line[3]
-    raw_content.append(output_lines[i]); i+=1
+    original_name, final_name = get_filenames(diff_line)
+    raw_content.append(output_lines[i])
+    i+=1
     
     # let's get to the line that starts with ---
     while i < len(output_lines) and not output_lines[i].startswith("---"):
