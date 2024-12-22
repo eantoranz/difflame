@@ -1408,7 +1408,8 @@ try:
 
     diff_output = run_git_command(git_diff_params)
 except:
-    appendOutput("there was an error running git\n")
+    sys.stderr.write("there was an error running git\n")
+    sys.stderr.flush()
     traceback.print_exc()
     sys.exit(1)
 
