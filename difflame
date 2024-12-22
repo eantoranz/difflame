@@ -40,15 +40,13 @@ OPTIONS["PAGER"] = None
 DIFF_OPTIONS = []
 BLAME_OPTIONS = []
 
-OUTPUT = sys.stdout
+OUTPUT = ""
 PAGER_PROCESS = None  # process if using pager
 
 
-def writeOutput(something_to_write: str) -> None:
-    if PAGER_PROCESS is None:
-        OUTPUT.write(something_to_write)
-    else:
-        OUTPUT.write(something_to_write.encode())
+def appendOutput(something_to_write: str) -> None:
+    global OUTPUT
+    OUTPUT += something_to_write
 
 
 def run_git_command(args):
@@ -382,8 +380,8 @@ class DiffFileObject:
         if self.is_binary:
             # let's print the raw content
             for line in self.raw_content:
-                writeOutput(line)
-                writeOutput("\n")
+                appendOutput(line)
+                appendOutput("\n")
             OUTPUT.flush()
             return
 
@@ -394,11 +392,11 @@ class DiffFileObject:
             and self.raw_content[i][0] != "@"
         ):
             if OPTIONS["COLOR"]:
-                writeOutput(COLOR_WHITE)
-            writeOutput(self.raw_content[i])
+                appendOutput(COLOR_WHITE)
+            appendOutput(self.raw_content[i])
             if OPTIONS["COLOR"]:
-                writeOutput(COLOR_RESET)
-            writeOutput("\n")
+                appendOutput(COLOR_RESET)
+            appendOutput("\n")
             i += 1
 
         if len(self.hunks) == 0:
@@ -556,40 +554,40 @@ class DiffHunk:
                         ):
                             # have to print the hink
                             if OPTIONS["COLOR"]:
-                                writeOutput(COLOR_WHITE)
-                            writeOutput(
+                                appendOutput(COLOR_WHITE)
+                            appendOutput(
                                 "\t"
                                 + line.revision[:SHORT_REV_LENGTH]
                                 + ": "
                                 + revision_info["summary"]
                             )
                             if OPTIONS["COLOR"]:
-                                writeOutput(COLOR_RESET)
-                            writeOutput("\n")
+                                appendOutput(COLOR_RESET)
+                            appendOutput("\n")
                             previous_revision = line.revision
                     else:
                         previous_revision = None
                 if line.added is None:
-                    writeOutput(" ")
+                    appendOutput(" ")
                 elif not reverse and line.added or reverse and not line.added:
                     if OPTIONS["COLOR"]:
-                        writeOutput(COLOR_GREEN)
-                    writeOutput("+")
+                        appendOutput(COLOR_GREEN)
+                    appendOutput("+")
                 elif not reverse and not line.added or reverse and line.added:
                     if OPTIONS["COLOR"]:
-                        writeOutput(COLOR_RED)
-                    writeOutput("-")
-                writeOutput(line.revision[:SHORT_REV_LENGTH] + " ")
+                        appendOutput(COLOR_RED)
+                    appendOutput("-")
+                appendOutput(line.revision[:SHORT_REV_LENGTH] + " ")
                 if OPTIONS["SHOWNAME"] or OPTIONS["SHOWMAIL"]:
-                    writeOutput("(")
+                    appendOutput("(")
                 if OPTIONS["SHOWNAME"]:
-                    writeOutput(
+                    appendOutput(
                         revision_info["author"]
                         + (" " * (max_author_width - len(revision_info["author"])))
                         + " "
                     )
                 if OPTIONS["SHOWMAIL"]:
-                    writeOutput(
+                    appendOutput(
                         "<"
                         + revision_info["author_mail"]
                         + ">"
@@ -597,7 +595,7 @@ class DiffHunk:
                         + " "
                     )
                 if OPTIONS["SHOWDATE"]:
-                    writeOutput(
+                    appendOutput(
                         str(datetime.fromtimestamp(int(revision_info["author_time"])))
                         + " "
                     )
@@ -608,13 +606,13 @@ class DiffHunk:
                     or reverse
                     and line.added
                 ):
-                    writeOutput(
+                    appendOutput(
                         ("%" + str(starting_line_width) + "d") % starting_line_number
                     )
                     starting_line_number += 1
                 else:
-                    writeOutput(" " * starting_line_width)
-                writeOutput(" ")
+                    appendOutput(" " * starting_line_width)
+                appendOutput(" ")
                 if (
                     line.added is None
                     or not reverse
@@ -622,31 +620,32 @@ class DiffHunk:
                     or reverse
                     and not line.added
                 ):
-                    writeOutput(("%" + str(final_line_width) + "d") % final_line_number)
+                    appendOutput(
+                        ("%" + str(final_line_width) + "d") % final_line_number
+                    )
                     final_line_number += 1
                 else:
-                    writeOutput(" " * final_line_width)
-                writeOutput(") " + line.content)
+                    appendOutput(" " * final_line_width)
+                appendOutput(") " + line.content)
                 if OPTIONS["COLOR"]:
-                    writeOutput(COLOR_RESET)
+                    appendOutput(COLOR_RESET)
             else:
-                writeOutput(line)
-            writeOutput("\n")
-            OUTPUT.flush()
+                appendOutput(line)
+            appendOutput("\n")
 
     def printDescriptorLine(self):
         """
         Print hunk description line
         """
         if OPTIONS["COLOR"]:
-            writeOutput(COLOR_CYAN)
+            appendOutput(COLOR_CYAN)
             index_of_separation = self.raw_content[0].index("@@", 2)
-            writeOutput(self.raw_content[0][: index_of_separation + 2])
-            writeOutput(COLOR_RESET)
-            writeOutput(self.raw_content[0][index_of_separation + 2 :])
+            appendOutput(self.raw_content[0][: index_of_separation + 2])
+            appendOutput(COLOR_RESET)
+            appendOutput(self.raw_content[0][index_of_separation + 2 :])
         else:
-            writeOutput(self.raw_content[0])  # hunk descriptor line
-        writeOutput("\n")
+            appendOutput(self.raw_content[0])  # hunk descriptor line
+        appendOutput("\n")
 
     def processHunk(self, original_file_blame, final_file_blame, reverse):
         lines = []
@@ -952,13 +951,13 @@ def print_revision_line(current_revision, previous_revision, adding_line):
         HINTS[current_revision] = hint
     else:
         hint = HINTS[current_revision]
-    writeOutput("\t")
+    appendOutput("\t")
     if OPTIONS["COLOR"]:
-        writeOutput(COLOR_WHITE)
-    writeOutput(hint)
+        appendOutput(COLOR_WHITE)
+    appendOutput(hint)
     if OPTIONS["COLOR"]:
-        writeOutput(COLOR_RESET)
-    writeOutput("\n")
+        appendOutput(COLOR_RESET)
+    appendOutput("\n")
 
     return current_revision
 
@@ -1387,21 +1386,6 @@ if not color_set:
 if OPTIONS["PROGRESS"] is None:
     OPTIONS["PROGRESS"] = sys.stderr.isatty()
 
-# pager
-if OPTIONS["PAGER"] is None:
-    OPTIONS["PAGER"] = sys.stdout.isatty()
-if OPTIONS["PAGER"]:
-    pager_args = ["less"]
-    if OPTIONS["COLOR"]:
-        pager_args.append("-R")
-    try:
-        PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
-        OUTPUT = PAGER_PROCESS.stdin
-    except Exception as e:
-        # could not start pager
-        sys.stderr.write(f"Could not start pager: {e}\n")
-        PAGER_PROCESS = None
-
 # if there's not at least a treeish, we can't proceed
 if treeish2 is None:
     sys.stderr.write("Didn't provide at least a treeish to work on\n")
@@ -1424,8 +1408,7 @@ try:
 
     diff_output = run_git_command(git_diff_params)
 except:
-    writeOutput("there was an error running git\n")
-    OUTPUT.flush()
+    appendOutput("there was an error running git\n")
     traceback.print_exc()
     sys.exit(1)
 
@@ -1436,8 +1419,29 @@ if DEBUG_GIT:
     sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
 
 sys.stderr.flush()
-OUTPUT.flush()
-OUTPUT.close()
-if PAGER_PROCESS is not None:
+
+# pager
+if OPTIONS["PAGER"] is None:
+    OPTIONS["PAGER"] = sys.stdout.isatty()
+if OPTIONS["PAGER"]:
+    pager_args = ["less"]
+    if OPTIONS["COLOR"]:
+        pager_args.append("-R")
+    try:
+        PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
+    except Exception as e:
+        # could not start pager
+        sys.stderr.write(f"Could not start pager: {e}\n")
+        PAGER_PROCESS = None
+
+# writing output
+if PAGER_PROCESS is None:
+    sys.stdout.write(OUTPUT)
+    sys.stdout.flush()
+    sys.stdout.close()
+else:
+    PAGER_PROCESS.stdin.write(OUTPUT.encode())
+    PAGER_PROCESS.stdin.flush()
+    PAGER_PROCESS.stdin.close()
     PAGER_PROCESS.wait()
 sys.stderr.close()
