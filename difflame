@@ -834,12 +834,10 @@ def get_revisions(treeish1, treeish2, filename=None):
     if treeish2 not in REVISIONS_CACHE[treeish1]:
         REVISIONS_CACHE[treeish1][treeish2] = dict()
     if filename not in REVISIONS_CACHE[treeish1][treeish2]:
-        if filename is None:
-            output = run_git_command(["log", "--pretty=%H", treeish1 + ".." + treeish2])
-        else:
-            output = run_git_command(
-                ["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", filename]
-            )
+        command = ["rev-list", f"^{treeish1}", treeish2]
+        if filename is not None:
+            command.extend(["--", filename])
+        output = run_git_command(command)
         REVISIONS_CACHE[treeish1][treeish2][filename] = list(
             line for line in output.split("\n") if line
         )
