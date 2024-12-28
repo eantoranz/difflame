@@ -840,7 +840,9 @@ def get_revisions(treeish1, treeish2, filename=None):
             output = run_git_command(
                 ["log", "--pretty=%H", treeish1 + ".." + treeish2, "--", filename]
             )
-        REVISIONS_CACHE[treeish1][treeish2][filename] = output.split("\n")
+        REVISIONS_CACHE[treeish1][treeish2][filename] = list(
+            line for line in output.split("\n") if line
+        )
     return REVISIONS_CACHE[treeish1][treeish2][filename]
 
 
