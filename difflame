@@ -969,8 +969,12 @@ def get_parent_revisions(revision):
     if revision in PARENT_REVISIONS_CACHE:
         return PARENT_REVISIONS_CACHE[revision]
     # didn't have the parent revisions
-    parents = (
-        run_git_command(["log", "--pretty=%P", revision]).split("\n")[0].split(" ")
+    parents = list(
+        parent
+        for parent in run_git_command(["log", "-1", "--pretty=%P", revision])
+        .split("\n")[0]
+        .split(" ")
+        if parent
     )
     PARENT_REVISIONS_CACHE[revision] = parents
     return parents
