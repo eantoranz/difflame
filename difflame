@@ -1253,7 +1253,11 @@ def process_diff_output(output, treeish1, treeish2):
         diff_file_objects.append(diff_file_object)
 
     if OPTIONS["PROGRESS"]:
-        sys.stderr.write(f"{chr(13)}Processing line {num_lines}/{num_lines}\n")
+        sys.stderr.write(
+            f"{chr(13)}Processing line {num_lines}/{num_lines} "
+            f'{" " * ((len(previous_filename) if previous_filename else 0) + 2)}'
+            "\n"
+        )
         sys.stderr.flush()
 
     for diff_file_object in diff_file_objects:
