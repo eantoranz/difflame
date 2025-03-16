@@ -62,11 +62,11 @@ def run_git_command(args):
         commandStr = ""
         for word in command:
             commandStr += word + " "
-        sys.stderr.write("git execution: " + str(commandStr) + "...")
+        sys.stderr.write(f"git execution: {"".join(command)}...")
         starting_time = time()
     result = subprocess.check_output(command)
     if DEBUG_GIT:
-        sys.stderr.write(str((time() - starting_time) * 1000) + " ms\n")
+        sys.stderr.write(f"{(time() - starting_time) * 1000} ms\n")
         sys.stderr.flush()
     return result.decode("utf-8")
 
@@ -326,9 +326,7 @@ class DiffFileObject:
                     ending_line = starting_line
                 else:
                     ending_line = starting_line + int(hunk_position[1]) - 1
-                git_blame_opts.extend(
-                    ["-L", str(starting_line) + "," + str(ending_line)]
-                )
+                git_blame_opts.extend(["-L", f"{starting_line},{ending_line}"])
         if not reverse_blame:
             # normal blame on final_revision
             if reverse_analysis:
@@ -340,11 +338,11 @@ class DiffFileObject:
             git_blame_opts.append("--reverse")
             if reverse_analysis:
                 git_blame_opts.extend(
-                    [self.final_revision + ".." + self.starting_revision]
+                    [f"{self.final_revision}..{self.starting_revision}"]
                 )
             else:
                 git_blame_opts.extend(
-                    [self.starting_revision + ".." + self.final_revision]
+                    [f"{self.starting_revision}..{self.final_revision}"]
                 )
 
         git_blame_opts.extend(["--", file_name])
@@ -554,10 +552,7 @@ class DiffHunk:
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_WHITE)
                             appendOutput(
-                                "\t"
-                                + line.revision[:SHORT_REV_LENGTH]
-                                + ": "
-                                + revision_info["summary"]
+                                f"\t{line.revision[:SHORT_REV_LENGTH]}: {revision_info["summary"]}"
                             )
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_RESET)
@@ -575,27 +570,22 @@ class DiffHunk:
                     if OPTIONS["COLOR"]:
                         appendOutput(COLOR_RED)
                     appendOutput("-")
-                appendOutput(line.revision[:SHORT_REV_LENGTH] + " ")
+                appendOutput(f"{line.revision[:SHORT_REV_LENGTH]} ")
                 if OPTIONS["SHOWNAME"] or OPTIONS["SHOWMAIL"]:
                     appendOutput("(")
                 if OPTIONS["SHOWNAME"]:
                     appendOutput(
-                        revision_info["author"]
+                        f"{revision_info["author"]} "
                         + (" " * (max_author_width - len(revision_info["author"])))
-                        + " "
                     )
                 if OPTIONS["SHOWMAIL"]:
                     appendOutput(
-                        "<"
-                        + revision_info["author_mail"]
-                        + ">"
+                        f"<{revision_info["author_mail"]}> "
                         + (" " * (max_mail_width - len(revision_info["author_mail"])))
-                        + " "
                     )
                 if OPTIONS["SHOWDATE"]:
                     appendOutput(
-                        str(datetime.fromtimestamp(int(revision_info["author_time"])))
-                        + " "
+                        f"{datetime.fromtimestamp(int(revision_info["author_time"]))} "
                     )
                 if (
                     line.added is None
@@ -624,7 +614,7 @@ class DiffHunk:
                     final_line_number += 1
                 else:
                     appendOutput(" " * final_line_width)
-                appendOutput(") " + line.content)
+                appendOutput(f") {line.content}")
                 if OPTIONS["COLOR"]:
                     appendOutput(COLOR_RESET)
             else:
@@ -882,13 +872,8 @@ def process_hunk_from_diff_output(
         # not the begining of a hunk
         raise Exception(
             "Not the begining of a hunk on line "
-            + str(i + 1)
-            + " ("
-            + original_name
-            + ", "
-            + final_name
-            + "): "
-            + hunk_description_line[0]
+            f"{i + 1} ({original_name}, {final_name}): "
+            f"{hunk_description_line[0]}"
         )
 
     # description line for a hunk
@@ -1012,7 +997,7 @@ def get_line_in_revision(original_revision, final_revision, filename, line_numbe
         DIFF_FILES_CACHE[original_revision][final_revision] = dict()
     if filename not in DIFF_FILES_CACHE[original_revision][final_revision]:
         output = run_git_diff(
-            ["--no-color", original_revision + ".." + final_revision, "--", filename]
+            ["--no-color", f"{original_revision}..{final_revision}", "--", filename]
         ).split("\n")
         (diff_object, i) = process_file_from_diff_output(
             output, 0, original_revision, final_revision
@@ -1164,11 +1149,7 @@ def process_file_from_diff_output(output_lines, starting_line, treeish1, treeish
     # next should begin with +++
     if not output_lines[i].startswith("+++"):
         raise Exception(
-            "Was expecting line with +++ for a file ("
-            + original_name
-            + ", "
-            + final_name
-            + ")"
+            "Was expecting line with +++ for a file " f"({original_name}, {final_name})"
         )
 
     raw_content.append(output_lines[i])
@@ -1256,7 +1237,7 @@ def process_diff_output(output, treeish1, treeish2):
         diff_file_objects.append(diff_file_object)
 
     if OPTIONS["PROGRESS"]:
-        sys.stderr.write(f"{chr(13)}Processing line {len(lines)}/{len(lines)}\n")
+        sys.stderr.write(f"{chr(13)}Processing line {num_lines}/{num_lines}\n")
         sys.stderr.flush()
 
     for diff_file_object in diff_file_objects:
@@ -1337,7 +1318,7 @@ for param in sys.argv[1:]:
         if param == "--profile":
             OPTIONS["PROFILE"] = True
             continue
-        sys.stderr.write("Couldn't process option <<" + param + ">>\n")
+        sys.stderr.write(f"Couldn't process option <<{param}>>\n")
     if param == "-w":
         # avoid space changes
         BLAME_OPTIONS.append(param)
@@ -1355,9 +1336,7 @@ for param in sys.argv[1:]:
     # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
     if treeish1 is not None:
         # already had 2 treeishes set up
-        raise Exception(
-            "Already have 2 treeishes to work on: " + treeish1 + ".." + treeish2
-        )
+        raise Exception(f"Already have 2 treeishes to work on: {treeish1}..{treeish2}")
     double_dot_index = param.find("..")
     if double_dot_index == -1:
         # single treeish
@@ -1368,7 +1347,7 @@ for param in sys.argv[1:]:
         if treeish2 is not None:
             # already had at least a treeish set up
             raise Exception(
-                "Already had at least a treeish to work on defined: " + treeish2
+                f"Already had at least a treeish to work on defined: {treeish2}"
             )
         treeish1 = get_full_revision_id(param[0:double_dot_index])
         treeish2 = get_full_revision_id(param[double_dot_index + 2 :])
@@ -1396,7 +1375,7 @@ try:
     git_diff_params = ["diff"]
     git_diff_params.append("--no-color")
     git_diff_params.extend(DIFF_OPTIONS)
-    git_diff_params.append(treeish1 + ".." + treeish2)
+    git_diff_params.append(f"{treeish1}..{treeish2}")
     if len(paths) > 0:
         # only get diff for some paths
         git_diff_params.append("--")
@@ -1419,7 +1398,7 @@ if OPTIONS["PROFILE"]:
 process_diff_output(diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
-    sys.stderr.write("Total git executions: " + str(TOTAL_GIT_EXECUTIONS) + "\n")
+    sys.stderr.write(f"Total git executions: {TOTAL_GIT_EXECUTIONS}\n")
 
 sys.stderr.flush()
 
