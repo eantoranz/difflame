@@ -1208,10 +1208,10 @@ def process_diff_output(output, treeish1, treeish2):
     max_starting_line = 0
     max_final_line = 0
     num_lines = len(lines)
+    previous_filename = ""
     while i < len(lines):
         if OPTIONS["PROGRESS"]:
             sys.stderr.write(f"{chr(13)}Processing line {i}/{num_lines}")
-            sys.stderr.flush()
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
@@ -1221,6 +1221,22 @@ def process_diff_output(output, treeish1, treeish2):
         (diff_file_object, i) = process_file_from_diff_output(
             lines, i, treeish1, treeish2
         )
+        if OPTIONS["PROGRESS"]:
+            current_filename = (
+                diff_file_object.final_name
+                if diff_file_object.final_name
+                else diff_file_object.original
+            )
+            # should not happen but if there is no current filename, we skip
+            if current_filename:
+                sys.stderr.write(f" ({current_filename})")
+                name_shortage = len(previous_filename) - len(current_filename)
+                if name_shortage > 0:
+                    # need to clear up some characters in output
+                    sys.stderr.write(" " * name_shortage)
+                previous_filename = current_filename
+            sys.stderr.flush()
+
         diff_file_object.process(reverse)
         temp = diff_file_object.getMaxNameWidth()
         if temp > max_name_width:
