@@ -1,7 +1,7 @@
 # difflame
 
 ## Licensing
-Copyright 2017 Edmundo Carmona Antoranz  
+Copyright (c) 2017-2025 Edmundo Carmona Antoranz
 Released under the terms of GPLv2
 
 
