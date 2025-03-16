@@ -35,6 +35,7 @@ OPTIONS["SHOWMAIL"] = False
 OPTIONS["SHOWDATE"] = True
 OPTIONS["PROGRESS"] = None
 OPTIONS["PAGER"] = None
+OPTIONS["PROFILE"] = False
 
 # options used for diff and blame
 DIFF_OPTIONS = []
@@ -1347,6 +1348,9 @@ for param in sys.argv[1:]:
                 continue
             OPTIONS["PAGER"] = param == "--pager"
             continue
+        if param == "--profile":
+            OPTIONS["PROFILE"] = True
+            continue
         sys.stderr.write("Couldn't process option <<" + param + ">>\n")
     if param == "-w":
         # avoid space changes
@@ -1420,6 +1424,11 @@ except:
     sys.exit(1)
 
 # processing diff output
+if OPTIONS["PROFILE"]:
+    import cProfile
+    cProfile.run("process_diff_output(diff_output,treeish1,treeish2)")
+    print("Done profiling")
+    sys.exit(0)
 process_diff_output(diff_output, treeish1, treeish2)
 
 if DEBUG_GIT:
