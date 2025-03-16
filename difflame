@@ -99,9 +99,7 @@ DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
 # shortened revision ID length
-SHORT_REV_LENGTH = len(
-    run_git_command(["log", "--max-count=1", "--pretty=%h", "HEAD"]).split("\n")[0]
-)
+SHORT_REV_LENGTH = len(run_git_command(["rev-parse", "--short", "HEAD"]).split("\n")[0])
 
 # caches
 
