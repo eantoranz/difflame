@@ -41,13 +41,13 @@ OPTIONS["PROFILE"] = False
 DIFF_OPTIONS = []
 BLAME_OPTIONS = []
 
-OUTPUT = ""
+OUTPUT = []
 PAGER_PROCESS = None  # process if using pager
 
 
 def appendOutput(something_to_write: str) -> None:
     global OUTPUT
-    OUTPUT += something_to_write
+    OUTPUT.append(something_to_write)
 
 
 def run_git_command(args):
@@ -381,7 +381,6 @@ class DiffFileObject:
             for line in self.raw_content:
                 appendOutput(line)
                 appendOutput("\n")
-            OUTPUT.flush()
             return
 
         i = 0
@@ -1260,15 +1259,7 @@ def process_diff_output(output, treeish1, treeish2):
         sys.stderr.write(f"{chr(13)}Processing line {len(lines)}/{len(lines)}\n")
         sys.stderr.flush()
 
-    counter = 0
-    counter_limit = len(diff_file_objects)
     for diff_file_object in diff_file_objects:
-        counter += 1
-        if OPTIONS["PROGRESS"]:
-            sys.stderr.write(
-                f"{chr(13)}Processing diff object {counter}/{counter_limit}"
-            )
-            sys.stderr.flush()
         diff_file_object.stdoutPrint(
             reverse,
             max_name_width,
@@ -1276,11 +1267,6 @@ def process_diff_output(output, treeish1, treeish2):
             len(str(max_starting_line)),
             len(str(max_final_line)),
         )
-    if OPTIONS["PROGRESS"]:
-        sys.stderr.write(
-            f"{chr(13)}Processing diff object {counter_limit}/{counter_limit}\n"
-        )
-        sys.stderr.flush()
 
 
 # parameters
@@ -1426,6 +1412,7 @@ except:
 # processing diff output
 if OPTIONS["PROFILE"]:
     import cProfile
+
     cProfile.run("process_diff_output(diff_output,treeish1,treeish2)")
     print("Done profiling")
     sys.exit(0)
@@ -1451,12 +1438,17 @@ if OPTIONS["PAGER"]:
         PAGER_PROCESS = None
 
 # writing output
+full_output = "".join(OUTPUT)
 if PAGER_PROCESS is None:
-    sys.stdout.write(OUTPUT)
+    sys.stdout.write(full_output)
     sys.stdout.flush()
     sys.stdout.close()
 else:
-    PAGER_PROCESS.stdin.write(OUTPUT.encode())
+    try:
+        PAGER_PROCESS.stdin.write(full_output.encode())
+    except BrokenPipeError:
+        # probably the user just came out before all output had been pushed
+        pass
     PAGER_PROCESS.stdin.flush()
     PAGER_PROCESS.stdin.close()
     PAGER_PROCESS.wait()
