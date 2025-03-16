@@ -1228,11 +1228,10 @@ def process_diff_output(output, treeish1, treeish2):
     max_mail_width = 0
     max_starting_line = 0
     max_final_line = 0
+    num_lines = len(lines)
     while i < len(lines):
         if OPTIONS["PROGRESS"]:
-            sys.stderr.write(
-                chr(13) + "Processing line " + str(i) + "/" + str(len(lines))
-            )
+            sys.stderr.write(f"{chr(13)}Processing line {i}/{num_lines}")
             sys.stderr.flush()
         starting_line = lines[i]
         if len(starting_line) == 0:
@@ -1259,16 +1258,18 @@ def process_diff_output(output, treeish1, treeish2):
         diff_file_objects.append(diff_file_object)
 
     if OPTIONS["PROGRESS"]:
-        sys.stderr.write(
-            chr(13)
-            + "Processing line "
-            + str(len(lines))
-            + "/"
-            + str(len(lines))
-            + "\n"
-        )
+        sys.stderr.write(f"{chr(13)}Processing line {len(lines)}/{len(lines)}\n")
+        sys.stderr.flush()
 
+    counter = 0
+    counter_limit = len(diff_file_objects)
     for diff_file_object in diff_file_objects:
+        counter += 1
+        if OPTIONS["PROGRESS"]:
+            sys.stderr.write(
+                f"{chr(13)}Processing diff object {counter}/{counter_limit}"
+            )
+            sys.stderr.flush()
         diff_file_object.stdoutPrint(
             reverse,
             max_name_width,
@@ -1276,6 +1277,11 @@ def process_diff_output(output, treeish1, treeish2):
             len(str(max_starting_line)),
             len(str(max_final_line)),
         )
+    if OPTIONS["PROGRESS"]:
+        sys.stderr.write(
+            f"{chr(13)}Processing diff object {counter_limit}/{counter_limit}\n"
+        )
+        sys.stderr.flush()
 
 
 # parameters
