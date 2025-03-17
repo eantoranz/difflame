@@ -68,7 +68,7 @@ def run_git_command(args):
     if DEBUG_GIT:
         sys.stderr.write(f"{(time() - starting_time) * 1000} ms\n")
         sys.stderr.flush()
-    return result.decode("utf-8")
+    return result.decode("utf-8", errors="replace")
 
 
 def run_git_blame(arguments):
