@@ -1234,6 +1234,7 @@ def process_diff_output(output, treeish1, treeish2):
                 if name_shortage > 0:
                     # need to clear up some characters in output
                     sys.stderr.write(" " * name_shortage)
+                    sys.stderr.write(chr(8) * name_shortage)
                 previous_filename = current_filename
             sys.stderr.flush()
 
