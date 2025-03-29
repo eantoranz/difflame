@@ -62,7 +62,7 @@ def run_git_command(args):
         commandStr = ""
         for word in command:
             commandStr += word + " "
-        sys.stderr.write(f"git execution: {" ".join(command)}...")
+        sys.stderr.write(f"git execution: {' '.join(command)}...")
         starting_time = time()
     result = subprocess.check_output(command)
     if DEBUG_GIT:
@@ -552,7 +552,7 @@ class DiffHunk:
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_WHITE)
                             appendOutput(
-                                f"\t{line.revision[:SHORT_REV_LENGTH]}: {revision_info["summary"]}"
+                                f"\t{line.revision[:SHORT_REV_LENGTH]}: {revision_info['summary']}"
                             )
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_RESET)
@@ -575,17 +575,17 @@ class DiffHunk:
                     appendOutput("(")
                 if OPTIONS["SHOWNAME"]:
                     appendOutput(
-                        f"{revision_info["author"]} "
+                        f"{revision_info['author']} "
                         + (" " * (max_author_width - len(revision_info["author"])))
                     )
                 if OPTIONS["SHOWMAIL"]:
                     appendOutput(
-                        f"<{revision_info["author_mail"]}> "
+                        f"<{revision_info['author_mail']}> "
                         + (" " * (max_mail_width - len(revision_info["author_mail"])))
                     )
                 if OPTIONS["SHOWDATE"]:
                     appendOutput(
-                        f"{datetime.fromtimestamp(int(revision_info["author_time"]))} "
+                        f"{datetime.fromtimestamp(int(revision_info['author_time']))} "
                     )
                 if (
                     line.added is None
