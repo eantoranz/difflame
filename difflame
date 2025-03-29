@@ -1427,9 +1427,9 @@ sys.stderr.flush()
 if OPTIONS["PAGER"] is None:
     OPTIONS["PAGER"] = sys.stdout.isatty()
 if OPTIONS["PAGER"]:
-    pager_args = ["less"]
+    pager_args = ["sh", "-c", "less"]
     if OPTIONS["COLOR"]:
-        pager_args.append("-R")
+        pager_args[-1] += " -R"
     try:
         PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
     except Exception as e:
