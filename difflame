@@ -5,11 +5,14 @@
 # Released under the terms of GPLv2
 
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
 import traceback
 from datetime import datetime
+from pathlib import Path
 from time import time
 
 # color codes
@@ -1429,6 +1432,13 @@ if OPTIONS["PAGER"]:
     pager_args = ["less"]
     if OPTIONS["COLOR"]:
         pager_args.append("-R")
+    if os.name == "nt":
+        if shutil.which("sh"):
+            sh_command = "sh"
+        else:
+            git_path = Path(shutil.which("git"))
+            sh_command = str(git_path.parent.parent / "bin" / "sh.exe")
+        pager_args = [sh_command, "-c", " ".join(pager_args)]
     try:
         PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
     except Exception as e:
