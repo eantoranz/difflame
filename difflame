@@ -9,8 +9,11 @@ import re
 import subprocess
 import sys
 import traceback
+import os
+import shutil
 from datetime import datetime
 from time import time
+from pathlib import Path
 
 # color codes
 COLOR_CYAN = chr(0x1B) + chr(0x5B) + chr(0x33) + chr(0x36) + chr(0x6D)
@@ -1427,9 +1430,16 @@ sys.stderr.flush()
 if OPTIONS["PAGER"] is None:
     OPTIONS["PAGER"] = sys.stdout.isatty()
 if OPTIONS["PAGER"]:
-    pager_args = ["sh", "-c", "less"]
+    pager_args = ["less"]
     if OPTIONS["COLOR"]:
-        pager_args[-1] += " -R"
+        pager_args.append("-R")
+    if os.name == "nt":
+        if shutil.which("sh"):
+            sh_command = "sh"
+        else:
+            git_path = Path(shutil.which("git"))
+            sh_command = str(git_path.parent.parent / "bin" / "sh.exe")
+        pager_args = [sh_command, "-c", " ".join(pager_args)]
     try:
         PAGER_PROCESS = subprocess.Popen(pager_args, stdin=subprocess.PIPE)
     except Exception as e:
