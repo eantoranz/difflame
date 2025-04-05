@@ -684,18 +684,22 @@ class DiffHunk:
                 ending_line_number += 1
             elif not reverse and line[0] == "-" or reverse and line[0] == "+":
                 # it's a line that was deleted so have to pull it from original_blame
-                original_line = self.readPorcelainLine(original_file_blame)
-                # what is the _real_ revision where the lines were deleted?
-                self.max_starting_line = starting_line_number
-                if reverse:
+                # (or final, if in reverse)
+                if not reverse:
+                    original_line = self.readPorcelainLine(original_file_blame)
                     deleted_line_number = original_line["final_line"]
+                    revision = original_line["revision"]
+                    filename = original_line["filename"]
                 else:
-                    deleted_line_number = original_line["original_line"]
-                revision = original_line["revision"]
+                    final_line = self.readPorcelainLine(final_file_blame)
+                    deleted_line_number = final_line["original_line"]
+                    revision = final_line["revision"]
+                    filename = final_line["filename"]
+                self.max_starting_line = starting_line_number
                 deletion_revision = process_deleted_line(
                     starting_revision,
                     target_revision,
-                    original_line["filename"],
+                    filename,
                     deleted_line_number,
                 )
                 # print hint if needed
