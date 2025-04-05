@@ -816,7 +816,9 @@ def get_full_revision_id(revision):
     return full_revision
 
 
-def get_revisions(treeish1: str, treeish2: str, filename: Union[str, None] = None) -> list[str]:
+def get_revisions(
+    treeish1: str, treeish2: str, filename: Union[str, None] = None
+) -> list[str]:
     """
     get the list of revisions that are part of treeish2
     and that _do not_ belong to treeish1
@@ -1052,7 +1054,10 @@ def get_line_in_revision(
 
 
 def process_deleted_line(
-    starting_revision: str, target_revision: str, original_filename: str, deleted_line_number: int
+    starting_revision: str,
+    target_revision: str,
+    original_filename: str,
+    deleted_line_number: int,
 ) -> Union[str, None]:
     """
     Manually find the revision in the history of treeish2 where the line reported was deleted (in relation to treeish1)
