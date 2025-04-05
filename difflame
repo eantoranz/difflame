@@ -1214,7 +1214,7 @@ def process_diff_output(output, treeish1, treeish2):
     previous_filename = ""
     while i < len(lines):
         if OPTIONS["PROGRESS"]:
-            sys.stderr.write(f"{chr(13)}Processing line {i}/{num_lines}")
+            sys.stderr.write(f"{chr(13)}Processing line {i+1}/{num_lines}")
         starting_line = lines[i]
         if len(starting_line) == 0:
             # got to the end of the diff output
