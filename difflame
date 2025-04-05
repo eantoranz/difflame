@@ -639,10 +639,10 @@ class DiffHunk:
         appendOutput("\n")
 
     def processHunk(self, original_file_blame, final_file_blame, reverse):
-        lines = []
         """
         analyze hunk and save its lines
         """
+        lines = []
         starting_line_number = self.original_file_starting_line
         ending_line_number = self.final_file_starting_line
         if reverse:
