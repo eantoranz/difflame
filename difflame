@@ -1406,8 +1406,7 @@ if treeish1 is None:
 
 diff_output = None
 try:
-    git_diff_params = ["diff"]
-    git_diff_params.append("--no-color")
+    git_diff_params = ["--no-color"]
     git_diff_params.extend(DIFF_OPTIONS)
     git_diff_params.append(f"{treeish1}..{treeish2}")
     if len(paths) > 0:
@@ -1415,7 +1414,7 @@ try:
         git_diff_params.append("--")
         git_diff_params.extend(paths)
 
-    diff_output = run_git_command(git_diff_params)
+    diff_output = run_git_diff(git_diff_params)
 except:
     sys.stderr.write("there was an error running git\n")
     sys.stderr.flush()
