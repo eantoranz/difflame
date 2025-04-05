@@ -1412,6 +1412,11 @@ except:
     traceback.print_exc()
     sys.exit(1)
 
+if not diff_output:
+    # Repeating `git diff` behavior when there are no changes:
+    # no output, exit code 0.
+    sys.exit(0)
+
 # processing diff output
 if OPTIONS["PROFILE"]:
     import cProfile
