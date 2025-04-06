@@ -62,9 +62,6 @@ def run_git_command(args):
     command.extend(args)
     if DEBUG_GIT:
         TOTAL_GIT_EXECUTIONS += 1
-        commandStr = ""
-        for word in command:
-            commandStr += word + " "
         sys.stderr.write(f"git execution: {' '.join(command)}...")
         starting_time = time()
     result = subprocess.check_output(command)
