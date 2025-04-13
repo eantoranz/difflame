@@ -56,8 +56,8 @@ information about the revision itself without having to resort to an additional
 call to git show.
 
 ## Parameters
-You can provide one or two *treeishs*. If you provide only one, __HEAD__ will be
-assumed to be the second treeish.
+You can provide one or two *committishes*. If you provide only one, __HEAD__ will be
+assumed to be the second committish.
 
 You can also provide paths (which will be proxied into `git diff`) after __--__.
 

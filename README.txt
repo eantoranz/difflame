@@ -50,8 +50,8 @@ relate to the same revision. This is so that it's possible to get a little more
 information about the revision itself without having to resort to an additional
 call to git show.
 
-You can provide one or two treeishs. If you provide only one, HEAD will be
-assumed to be the second treeish.
+You can provide one or two committishes. If you provide only one, HEAD will be
+assumed to be the second committish.
 
 You can also provide paths (which will be proxied into git diff) after --.
 

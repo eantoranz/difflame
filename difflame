@@ -97,8 +97,8 @@ def run_git_diff(arguments: list[str]) -> str:
     return run_git_command(args)
 
 
-def run_git_merge_base(treeish1: str, treeish2: str) -> str:
-    return run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+def run_git_merge_base(committish1: str, committish2: str) -> str:
+    return run_git_command(["merge-base", committish1, committish2]).split("\n")[0]
 
 
 DEBUG_GIT = False
@@ -219,16 +219,16 @@ def set_revision_information(
 """
 caches to save:
     - diff of files when analyzing revisions (merges and so on)
-    - revisions between 2 revisions (treeish1..treeish2)
-    - full revision ID corresponding to some treeish (tag, short revision ID, etc)
+    - revisions between 2 revisions (committish1..committish2)
+    - full revision ID corresponding to some committish (tag, short revision ID, etc)
 
 DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
 use get_line_in_revision()
 
-REVISIONS_CACHE[treeish1][treeish2]
+REVISIONS_CACHE[committish1][committish2]
 use get_revisions()
 
-REVISIONS_ID_CACHE[treeish]
+REVISIONS_ID_CACHE[committish]
 use get_full_revision_id()
 
 """
@@ -357,7 +357,7 @@ class DiffFileObject:
         """
         Process the content of the diff for this file (with blame information, the whole package)
 
-        If reverse, "blaming analysis" has to be performed treeish2..treeish1
+        If reverse, "blaming analysis" has to be performed committish2..committish1
         """
         if self.is_binary:
             # not much to do here
@@ -812,25 +812,25 @@ def get_full_revision_id(revision):
 
 
 def get_revisions(
-    treeish1: str, treeish2: str, filename: Union[str, None] = None
+    committish1: str, committish2: str, filename: Union[str, None] = None
 ) -> list[str]:
     """
-    get the list of revisions that are part of treeish2
-    and that _do not_ belong to treeish1
+    get the list of revisions that are part of committish2
+    and that _do not_ belong to committish1
     """
-    if treeish1 not in REVISIONS_CACHE:
-        REVISIONS_CACHE[treeish1] = dict()
-    if treeish2 not in REVISIONS_CACHE[treeish1]:
-        REVISIONS_CACHE[treeish1][treeish2] = dict()
-    if filename not in REVISIONS_CACHE[treeish1][treeish2]:
-        command = ["rev-list", f"^{treeish1}", treeish2]
+    if committish1 not in REVISIONS_CACHE:
+        REVISIONS_CACHE[committish1] = dict()
+    if committish2 not in REVISIONS_CACHE[committish1]:
+        REVISIONS_CACHE[committish1][committish2] = dict()
+    if filename not in REVISIONS_CACHE[committish1][committish2]:
+        command = ["rev-list", f"^{committish1}", committish2]
         if filename is not None:
             command.extend(["--", filename])
         output = run_git_command(command)
-        REVISIONS_CACHE[treeish1][treeish2][filename] = list(
+        REVISIONS_CACHE[committish1][committish2][filename] = list(
             line for line in output.split("\n") if line
         )
-    return REVISIONS_CACHE[treeish1][treeish2][filename]
+    return REVISIONS_CACHE[committish1][committish2][filename]
 
 
 def cleanup_filename(filename):
@@ -1055,16 +1055,16 @@ def process_deleted_line(
     deleted_line_number: int,
 ) -> Union[str, None]:
     """
-    Manually find the revision in the history of treeish2 where the line reported was deleted (in relation to treeish1)
-    This will be called when treeish1 is _not_ part of the history of treeish2
+    Manually find the revision in the history of committish2 where the line reported was deleted (in relation to committish1)
+    This will be called when committish1 is _not_ part of the history of committish2
 
     If a revision could not be found, will return None (for recursion purposes)
 
-    revisions_treeish2 are the revisions that are exclusive for treeish2 (not present in the history of treeish1)
+    revisions_committish2 are the revisions that are exclusive for committish2 (not present in the history of committish1)
     """
     # find _all_ revisions that are part of "target" revision that are not part of the history of "starting" revision
     revisions_target = get_revisions(starting_revision, target_revision)
-    # TODO find the name of the file on treeish2
+    # TODO find the name of the file on committish2
     revisions_for_file = get_revisions(
         starting_revision, target_revision, original_filename
     )
@@ -1081,10 +1081,10 @@ def process_deleted_line(
     if line_in_revision is not None:
         # Line is not deleted on this revision.... returning None
         return None
-    # if in all parents (that are _not_ part of treeish1) the line is gone, then we found the revision where it was deleted
+    # if in all parents (that are _not_ part of committish1) the line is gone, then we found the revision where it was deleted
     for parent in get_parent_revisions(revision):
         if parent not in revisions_target:
-            # Parent is in the history of treeish1, discarding for analysis
+            # Parent is in the history of committish1, discarding for analysis
             continue
         line_in_revision = get_line_in_revision(
             starting_revision, parent, original_filename, deleted_line_number
@@ -1101,7 +1101,7 @@ def process_deleted_line(
 
 
 def process_file_from_diff_output(
-    output_lines: list[str], starting_line: int, treeish1: str, treeish2: str
+    output_lines: list[str], starting_line: int, committish1: str, committish2: str
 ) -> tuple[Union[DiffFileObject, None], int]:
     """
     process diff output
@@ -1135,7 +1135,7 @@ def process_file_from_diff_output(
             # just finished a file without content changes
             return (
                 DiffFileObject(
-                    treeish1, treeish2, original_name, final_name, raw_content, []
+                    committish1, committish2, original_name, final_name, raw_content, []
                 ),
                 i,
             )
@@ -1146,7 +1146,7 @@ def process_file_from_diff_output(
         # a file without content was the last on the patch
         return (
             DiffFileObject(
-                treeish1, treeish2, original_name, final_name, raw_content, []
+                committish1, committish2, original_name, final_name, raw_content, []
             ),
             i,
         )
@@ -1179,8 +1179,8 @@ def process_file_from_diff_output(
 
     return (
         DiffFileObject(
-            treeish1,
-            treeish2,
+            committish1,
+            committish2,
             original_name,
             final_name,
             raw_content,
@@ -1192,7 +1192,7 @@ def process_file_from_diff_output(
     )
 
 
-def process_diff_output(output: str, treeish1: str, treeish2: str) -> None:
+def process_diff_output(output: str, committish1: str, committish2: str) -> None:
     """
     process diff output
     """
@@ -1206,8 +1206,8 @@ def process_diff_output(output: str, treeish1: str, treeish2: str) -> None:
     i = 0
 
     reverse = False
-    merge_base = run_git_merge_base(treeish1, treeish2)
-    if merge_base == treeish2:
+    merge_base = run_git_merge_base(committish1, committish2)
+    if merge_base == committish2:
         reverse = True
 
     diff_file_objects = []
@@ -1227,7 +1227,7 @@ def process_diff_output(output: str, treeish1: str, treeish2: str) -> None:
         BLAMED_FILES_CACHE = dict()
         DIFF_FILES_CACHE = dict()
         (diff_file_object, i) = process_file_from_diff_output(
-            lines, i, treeish1, treeish2
+            lines, i, committish1, committish2
         )
         if OPTIONS["PROGRESS"]:
             current_filename = (
@@ -1280,8 +1280,8 @@ def process_diff_output(output: str, treeish1: str, treeish2: str) -> None:
 
 
 # parameters
-treeish1 = None
-treeish2 = None
+committish1 = None
+committish2 = None
 paths = []
 
 double_dash = False  # haven't found the double dash yet
@@ -1362,24 +1362,26 @@ for param in sys.argv[1:]:
         OPTIONS["SHOWMAIL"] = False
         OPTIONS["SHOWDATE"] = False
         continue
-    # it's a treeish (maybe 2 if using treeish1..treeish2 syntax)
-    if treeish1 is not None:
-        # already had 2 treeishes set up
-        raise Exception(f"Already have 2 treeishes to work on: {treeish1}..{treeish2}")
+    # it's a committish (maybe 2 if using committish1..committish2 syntax)
+    if committish1 is not None:
+        # already had 2 committishes set up
+        raise Exception(
+            f"Already have 2 committishes to work on: {committish1}..{committish2}"
+        )
     double_dot_index = param.find("..")
     if double_dot_index == -1:
-        # single treeish
-        treeish1 = treeish2
-        treeish2 = get_full_revision_id(param)
+        # single committish
+        committish1 = committish2
+        committish2 = get_full_revision_id(param)
     else:
-        # passing both treeishes in a single shot
-        if treeish2 is not None:
-            # already had at least a treeish set up
+        # passing both committishes in a single shot
+        if committish2 is not None:
+            # already had at least a committish set up
             raise Exception(
-                f"Already had at least a treeish to work on defined: {treeish2}"
+                f"Already had at least a committish to work on defined: {committish2}"
             )
-        treeish1 = get_full_revision_id(param[0:double_dot_index])
-        treeish2 = get_full_revision_id(param[double_dot_index + 2 :])
+        committish1 = get_full_revision_id(param[0:double_dot_index])
+        committish2 = get_full_revision_id(param[double_dot_index + 2 :])
 
 
 if not color_set:
@@ -1390,20 +1392,21 @@ if not color_set:
 if OPTIONS["PROGRESS"] is None:
     OPTIONS["PROGRESS"] = sys.stderr.isatty()
 
-# if there's not at least a treeish, we can't proceed
-if treeish2 is None:
-    sys.stderr.write("Didn't provide at least a treeish to work on\n")
+# if there's not at least a committish, we can't proceed
+if committish2 is None:
+    sys.stderr.write("Didn't provide at least a committish to work on\n")
     sys.exit(1)
 
-if treeish1 is None:
-    treeish1 = treeish2
-    treeish2 = get_full_revision_id("HEAD")
+if committish1 is None:
+    committish1 = committish2
+    committish2 = get_full_revision_id("HEAD")
 
-merge_base = run_git_merge_base(treeish1, treeish2)
-if merge_base != treeish1 and merge_base != treeish2:
+merge_base = run_git_merge_base(committish1, committish2)
+if merge_base != committish1 and merge_base != committish2:
     sys.stderr.write("difflame is not reliable working over divergent branches\n")
     sys.stderr.write(
-        f"You should try difflaming each branch separately from their merge-base ({merge_base[:SHORT_REV_LENGTH]})\n"
+        "You should try difflaming each branch separately"
+        f" from their merge-base ({merge_base[:SHORT_REV_LENGTH]})\n"
     )
     sys.stderr.flush()
 
@@ -1411,7 +1414,7 @@ diff_output = None
 try:
     git_diff_params = ["--no-color"]
     git_diff_params.extend(DIFF_OPTIONS)
-    git_diff_params.append(f"{treeish1}..{treeish2}")
+    git_diff_params.append(f"{committish1}..{committish2}")
     if len(paths) > 0:
         # only get diff for some paths
         git_diff_params.append("--")
@@ -1433,10 +1436,10 @@ if not diff_output:
 if OPTIONS["PROFILE"]:
     import cProfile
 
-    cProfile.run("process_diff_output(diff_output,treeish1,treeish2)")
+    cProfile.run("process_diff_output(diff_output,committish1,committish2)")
     print("Done profiling")
     sys.exit(0)
-process_diff_output(diff_output, treeish1, treeish2)
+process_diff_output(diff_output, committish1, committish2)
 
 if DEBUG_GIT:
     sys.stderr.write(f"Total git executions: {TOTAL_GIT_EXECUTIONS}\n")
