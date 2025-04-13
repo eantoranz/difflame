@@ -97,6 +97,10 @@ def run_git_diff(arguments: list[str]) -> str:
     return run_git_command(args)
 
 
+def run_git_merge_base(treeish1: str, treeish2: str) -> str:
+    return run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+
+
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
@@ -1202,7 +1206,7 @@ def process_diff_output(output: str, treeish1: str, treeish2: str) -> None:
     i = 0
 
     reverse = False
-    merge_base = run_git_command(["merge-base", treeish1, treeish2]).split("\n")[0]
+    merge_base = run_git_merge_base(treeish1, treeish2)
     if merge_base == treeish2:
         reverse = True
 
@@ -1394,6 +1398,14 @@ if treeish2 is None:
 if treeish1 is None:
     treeish1 = treeish2
     treeish2 = get_full_revision_id("HEAD")
+
+merge_base = run_git_merge_base(treeish1, treeish2)
+if merge_base != treeish1 and merge_base != treeish2:
+    sys.stderr.write("difflame is not reliable working over divergent branches\n")
+    sys.stderr.write(
+        f"You should try difflaming each branch separately from their merge-base ({merge_base[:SHORT_REV_LENGTH]})\n"
+    )
+    sys.stderr.flush()
 
 diff_output = None
 try:
