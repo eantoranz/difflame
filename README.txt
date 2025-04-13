@@ -8,7 +8,7 @@ Keywords: git diff blame
 Show the output of git diff with the additional information of git blame for
 added/removed lines so that it's 'trivial' to find out who did what.
 
-Example output (from difflame project itself, two revisions apart):
+Example output (from difflame project itself, two commits apart):
 
 $ ./difflame c4dae4fdd8ba883 97d230ce523
 diff --git a/difflame.py b/difflame.py
@@ -39,15 +39,15 @@ index ff65112..ec21fcd 100755
 OUTPUT FORMAT
 Lines that remain the same or that were added will indicate when those lines
 were 'added' to the file.
-Lines that were removed will display the revision where the line was removed.
-When it's not possible to pinpoint the revision where it was deleted, the last
-revision where that line was present is reported instead (as reported by
+Lines that were removed will display the commit where the line was removed.
+When it's not possible to pinpoint the commit where it was deleted, the last
+commit where that line was present is reported instead (as reported by
 git blame --reverse). When this happens, a percentage sign (%) will be used as
 the prefix of the deleted line (instead of the usual -).
 
 Notice how a 'hint' line is printed for lines that are removed/added and that
-relate to the same revision. This is so that it's possible to get a little more
-information about the revision itself without having to resort to an additional
+relate to the same commit. This is so that it's possible to get a little more
+information about the commit itself without having to resort to an additional
 call to git show.
 
 You can provide one or two committishes. If you provide only one, HEAD will be
@@ -76,8 +76,8 @@ options:
     -w: skip space changes (in both diff and blame)
     
     --no-hints: when printing added/removed lines, do not provide the hint
-        (one-line summary of the revision) before the lines themselves.
-        If a number of added/removed lines belong to the same revision one
+        (one-line summary of the commit) before the lines themselves.
+        If a number of added/removed lines belong to the same commit one
         after the other, a single hint line would be printed before them.
         It would have looked something like this with hints disabled (taken
         from git project):

@@ -24,7 +24,7 @@ COLOR_WHITE = chr(0x1B) + chr(0x5B) + chr(0x31) + chr(0x6D)
 COLOR_RESET = chr(0x1B) + chr(0x5B) + chr(0x6D)
 
 # general OPTIONS for difflame
-# HINTS: use hints (1-line summary of a revision)
+# HINTS: use hints (1-line summary of a commit)
 # COLOR: use color on output
 # SHOWNAME: print name of author
 # SHOWMAIL: print mail of author
@@ -104,24 +104,24 @@ def run_git_merge_base(committish1: str, committish2: str) -> str:
 DEBUG_GIT = False
 TOTAL_GIT_EXECUTIONS = 0
 
-# shortened revision ID length
+# shortened commit ID length
 SHORT_REV_LENGTH = len(run_git_command(["rev-parse", "--short", "HEAD"]).split("\n")[0])
 
 # caches
 
-# association between revisions and their hints (will be initialized if using hints)
+# association between commits and their hints (will be initialized if using hints)
 HINTS = None
 
-# association between shortened revision IDs and their real full IDs
-REVISIONS_CACHE = dict()
+# association between shortened commit IDs and their real full IDs
+COMMITS_CACHE = dict()
 
-# direct parent nodes of each revision
-PARENT_REVISIONS_CACHE = (
+# direct parent nodes of each commit
+PARENT_COMMITS_CACHE = (
     dict()
 )  # TODO does it have to be calculated depending on the path that is being analyzed?
 
 """
-information displayed for each revision on modified lines
+information displayed for each commit on modified lines
 - shortened-id
 - author
 - author_mail
@@ -133,21 +133,21 @@ information displayed for each revision on modified lines
 - committer_tz
 - summary
 
-use get_revision_info(full-rev-id)
+use get_commit_info(full-rev-id)
 """
-REVISIONS_INFO_CACHE = dict()
+COMMITS_INFO_CACHE = dict()
 
 
-def get_revision_info(full_id):
+def get_commit_info(full_id):
     """
-    Pull information about a revision
+    Pull information about a commit
 
-    if the revision is not present, information will be pulled from git
+    if the commit is not present, information will be pulled from git
     """
-    if full_id not in REVISIONS_INFO_CACHE:
+    if full_id not in COMMITS_INFO_CACHE:
         # information was not present.... have to pull it from git
         values = dict()
-        values["revision"] = full_id
+        values["commit"] = full_id
         output = run_git_command(["cat-file", "-p", full_id]).split("\n")
         summary_next = False
         for line in output:
@@ -182,11 +182,11 @@ def get_revision_info(full_id):
                     temp = line.split(" ")
                     values["committer_time"] = temp[-2]
                     values["committer_tz"] = temp[-1]
-        REVISIONS_INFO_CACHE[full_id] = values
-    return REVISIONS_INFO_CACHE[full_id]
+        COMMITS_INFO_CACHE[full_id] = values
+    return COMMITS_INFO_CACHE[full_id]
 
 
-def set_revision_information(
+def set_commit_information(
     full_id,
     author,
     author_mail,
@@ -199,11 +199,11 @@ def set_revision_information(
     summary,
 ):
     """
-    Save revision information (if it wasn't already saved)
+    Save commit information (if it wasn't already saved)
     """
-    if full_id not in REVISIONS_INFO_CACHE:
+    if full_id not in COMMITS_INFO_CACHE:
         values = dict()
-        values["revision"] = full_id
+        values["commit"] = full_id
         values["author"] = author
         values["author_mail"] = author_mail
         values["author_time"] = author_time
@@ -213,28 +213,28 @@ def set_revision_information(
         values["committer_time"] = committer_time
         values["committer_tz"] = committer_tz
         values["summary"] = summary
-        REVISIONS_INFO_CACHE[full_id] = values
+        COMMITS_INFO_CACHE[full_id] = values
 
 
 """
 caches to save:
-    - diff of files when analyzing revisions (merges and so on)
-    - revisions between 2 revisions (committish1..committish2)
-    - full revision ID corresponding to some committish (tag, short revision ID, etc)
+    - diff of files when analyzing commits (merges and so on)
+    - commits between 2 commits (committish1..committish2)
+    - full commit ID corresponding to some committish (tag, short commit ID, etc)
 
-DIFF_FILES_CACHE[originating_revision][final_revision][filename] = diff_file_object
-use get_line_in_revision()
+DIFF_FILES_CACHE[originating_commit][final_commit][filename] = diff_file_object
+use get_line_in_commit()
 
-REVISIONS_CACHE[committish1][committish2]
-use get_revisions()
+COMMITS_CACHE[committish1][committish2]
+use get_commits()
 
-REVISIONS_ID_CACHE[committish]
-use get_full_revision_id()
+COMMITS_ID_CACHE[committish]
+use get_full_commit_id()
 
 """
 DIFF_FILES_CACHE = None
-REVISIONS_CACHE = dict()
-REVISIONS_ID_CACHE = dict()
+COMMITS_CACHE = dict()
+COMMITS_ID_CACHE = dict()
 
 
 class DiffFileObject:
@@ -242,7 +242,7 @@ class DiffFileObject:
     Object to hold the content of diff for a file
 
     Will keep many things:
-        - revision where the diff 'started' and 'ended' (started..ended)
+        - commit where the diff 'started' and 'ended' (started..ended)
         - original filename,
         - final filename
         - raw_content: array of lines that make up the raw diff output
@@ -254,8 +254,8 @@ class DiffFileObject:
 
     def __init__(
         self,
-        starting_revision,
-        final_revision,
+        starting_commit,
+        final_commit,
         original_name,
         final_name,
         raw_content: list[str],
@@ -263,8 +263,8 @@ class DiffFileObject:
         original_hunk_positions=None,
         final_hunk_positions=None,
     ):
-        self.starting_revision = starting_revision
-        self.final_revision = final_revision
+        self.starting_commit = starting_commit
+        self.final_commit = final_commit
         self.original_name = original_name
         self.final_name = final_name
         self.raw_content = raw_content
@@ -333,22 +333,18 @@ class DiffFileObject:
                     ending_line = starting_line + int(hunk_position[1]) - 1
                 git_blame_opts.extend(["-L", f"{starting_line},{ending_line}"])
         if not reverse_blame:
-            # normal blame on final_revision
+            # normal blame on final_commit
             if reverse_analysis:
-                git_blame_opts.append(self.starting_revision)
+                git_blame_opts.append(self.starting_commit)
             else:
-                git_blame_opts.append(self.final_revision)
+                git_blame_opts.append(self.final_commit)
         else:
             # reverse blame
             git_blame_opts.append("--reverse")
             if reverse_analysis:
-                git_blame_opts.extend(
-                    [f"{self.final_revision}..{self.starting_revision}"]
-                )
+                git_blame_opts.extend([f"{self.final_commit}..{self.starting_commit}"])
             else:
-                git_blame_opts.extend(
-                    [f"{self.starting_revision}..{self.final_revision}"]
-                )
+                git_blame_opts.extend([f"{self.starting_commit}..{self.final_commit}"])
 
         git_blame_opts.extend(["--", file_name])
         return run_git_blame(git_blame_opts)
@@ -461,14 +457,14 @@ class HunkLine:
     Structure to hold information for a line on the hunk:
     - Added:
         Whether the line was added (True), removed (False), or left as is (None)
-    - Revision
+    - commit
     - Filename
     - Content
     """
 
-    def __init__(self, added, revision, filename, content):
+    def __init__(self, added, commit, filename, content):
         self.added = added
-        self.revision = revision
+        self.commit = commit
         self.filename = filename
         self.content = content
 
@@ -534,7 +530,7 @@ class DiffHunk:
         """
         starting_line_number = self.original_file_starting_line
         final_line_number = self.final_file_starting_line
-        previous_revision = None
+        previous_commit = None
         self.printDescriptorLine()
         for line in self.lines:
             if isinstance(line, HunkLine):
@@ -544,27 +540,24 @@ class DiffHunk:
                     or OPTIONS["SHOWMAIL"]
                     or OPTIONS["SHOWDATE"]
                 ):
-                    revision_info = get_revision_info(line.revision)
+                    commit_info = get_commit_info(line.commit)
                 if OPTIONS["HINTS"]:
                     # hints are being printed
                     if line.added is not None:
                         # line is added or deleted
-                        if (
-                            previous_revision is None
-                            or previous_revision != line.revision
-                        ):
+                        if previous_commit is None or previous_commit != line.commit:
                             # have to print the hink
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_WHITE)
                             appendOutput(
-                                f"\t{line.revision[:SHORT_REV_LENGTH]}: {revision_info['summary']}"
+                                f"\t{line.commit[:SHORT_REV_LENGTH]}: {commit_info['summary']}"
                             )
                             if OPTIONS["COLOR"]:
                                 appendOutput(COLOR_RESET)
                             appendOutput("\n")
-                            previous_revision = line.revision
+                            previous_commit = line.commit
                     else:
-                        previous_revision = None
+                        previous_commit = None
                 if line.added is None:
                     appendOutput(" ")
                 elif not reverse and line.added or reverse and not line.added:
@@ -575,22 +568,22 @@ class DiffHunk:
                     if OPTIONS["COLOR"]:
                         appendOutput(COLOR_RED)
                     appendOutput("-")
-                appendOutput(f"{line.revision[:SHORT_REV_LENGTH]} ")
+                appendOutput(f"{line.commit[:SHORT_REV_LENGTH]} ")
                 if OPTIONS["SHOWNAME"] or OPTIONS["SHOWMAIL"]:
                     appendOutput("(")
                 if OPTIONS["SHOWNAME"]:
                     appendOutput(
-                        f"{revision_info['author']} "
-                        + (" " * (max_author_width - len(revision_info["author"])))
+                        f"{commit_info['author']} "
+                        + (" " * (max_author_width - len(commit_info["author"])))
                     )
                 if OPTIONS["SHOWMAIL"]:
                     appendOutput(
-                        f"<{revision_info['author_mail']}> "
-                        + (" " * (max_mail_width - len(revision_info["author_mail"])))
+                        f"<{commit_info['author_mail']}> "
+                        + (" " * (max_mail_width - len(commit_info["author_mail"])))
                     )
                 if OPTIONS["SHOWDATE"]:
                     appendOutput(
-                        f"{datetime.fromtimestamp(int(revision_info['author_time']))} "
+                        f"{datetime.fromtimestamp(int(commit_info['author_time']))} "
                     )
                 if (
                     line.added is None
@@ -648,11 +641,11 @@ class DiffHunk:
         starting_line_number = self.original_file_starting_line
         ending_line_number = self.final_file_starting_line
         if reverse:
-            starting_revision = self.diff_file_object.final_revision
-            target_revision = self.diff_file_object.starting_revision
+            starting_commit = self.diff_file_object.final_commit
+            target_commit = self.diff_file_object.starting_commit
         else:
-            starting_revision = self.diff_file_object.starting_revision
-            target_revision = self.diff_file_object.final_revision
+            starting_commit = self.diff_file_object.starting_commit
+            target_commit = self.diff_file_object.final_commit
         for line in self.raw_content[1:]:
             if line[0] == " ":
                 # unchanged line
@@ -664,7 +657,7 @@ class DiffHunk:
                 lines.append(
                     HunkLine(
                         None,
-                        final_line["revision"],
+                        final_line["commit"],
                         final_line["filename"],
                         final_line["content"],
                     )
@@ -677,7 +670,7 @@ class DiffHunk:
                 lines.append(
                     HunkLine(
                         True,
-                        final_line["revision"],
+                        final_line["commit"],
                         final_line["filename"],
                         final_line["content"],
                     )
@@ -692,19 +685,19 @@ class DiffHunk:
                 deleted_line_number = selected_line[
                     "original_line" if reverse else "final_line"
                 ]
-                revision = selected_line["revision"]
+                commit = selected_line["commit"]
                 filename = selected_line["filename"]
                 content = selected_line["content"]
                 self.max_starting_line = starting_line_number
-                deletion_revision = process_deleted_line(
-                    starting_revision,
-                    target_revision,
+                deletion_commit = process_deleted_line(
+                    starting_commit,
+                    target_commit,
                     filename,
                     deleted_line_number,
                 )
                 hunk_line = HunkLine(
                     False,
-                    revision if deletion_revision is None else deletion_revision,
+                    commit if deletion_commit is None else deletion_commit,
                     filename,
                     content,
                 )
@@ -715,9 +708,9 @@ class DiffHunk:
             else:
                 # HunkLine is already in
                 if OPTIONS["SHOWNAME"] or OPTIONS["SHOWMAIL"]:
-                    revision_info = get_revision_info(lines[-1].revision)
-                    author_width = len(revision_info["author"])
-                    mail_width = len(revision_info["author_mail"])
+                    commit_info = get_commit_info(lines[-1].commit)
+                    author_width = len(commit_info["author"])
+                    mail_width = len(commit_info["author_mail"])
                     if author_width > self.max_author_width:
                         self.max_author_width = author_width
                     if mail_width > self.max_mail_width:
@@ -729,7 +722,7 @@ class DiffHunk:
         """
         Read the content of a blame --line-porcelain.
         Will return a dict with the following keys:
-        - revision (full ID)
+        - commit (full ID)
         - original_line
         - final_line
         - author
@@ -748,7 +741,7 @@ class DiffHunk:
         """
         values = dict()
         temp = porcelainOutput.pop(0).split(" ")
-        values["revision"] = temp[0]
+        values["commit"] = temp[0]
         values["original_line"] = int(temp[1])
         values["final_line"] = int(temp[2])
         values["boundary"] = False
@@ -768,9 +761,9 @@ class DiffHunk:
                 value = line[separator + 1 :]
                 values[field] = value
 
-        # save in cache if we don't have information about the revision yet
-        set_revision_information(
-            values["revision"],
+        # save in cache if we don't have information about the commit yet
+        set_commit_information(
+            values["commit"],
             values["author"],
             values["author-mail"][1:-1],
             values["author-time"],
@@ -784,53 +777,53 @@ class DiffHunk:
         return values
 
 
-def git_revision_hint(revision):
+def git_commit_hint(commit):
     """
-    get revision hint from git (won't include ending \n)
+    get commit hint from git (won't include ending \n)
     """
     return run_git_command(
-        ["show", "--oneline", "--no-color", "--summary", revision]
+        ["show", "--oneline", "--no-color", "--summary", commit]
     ).split("\n")[0]
 
 
-def get_full_revision_id(revision):
+def get_full_commit_id(commit):
     """
     Get the full ID of a given ID
 
     First will check in cache to see if the ID had been mapped
     """
-    # if revision has a prepending '^', we strip it
-    if revision[0] == "^":
-        revision = revision[1:]
-    if revision in REVISIONS_ID_CACHE:
-        # we already had the revision
-        return REVISIONS_ID_CACHE[revision]
+    # if commit has a prepending '^', we strip it
+    if commit[0] == "^":
+        commit = commit[1:]
+    if commit in COMMITS_ID_CACHE:
+        # we already had the commit
+        return COMMITS_ID_CACHE[commit]
     # fallback to get it from git
-    full_revision = run_git_command(["rev-parse", revision]).split("\n")[0]
-    REVISIONS_ID_CACHE[revision] = full_revision
-    return full_revision
+    full_commit = run_git_command(["rev-parse", commit]).split("\n")[0]
+    COMMITS_ID_CACHE[commit] = full_commit
+    return full_commit
 
 
-def get_revisions(
+def get_commits(
     committish1: str, committish2: str, filename: Union[str, None] = None
 ) -> list[str]:
     """
-    get the list of revisions that are part of committish2
+    get the list of commits that are part of committish2
     and that _do not_ belong to committish1
     """
-    if committish1 not in REVISIONS_CACHE:
-        REVISIONS_CACHE[committish1] = dict()
-    if committish2 not in REVISIONS_CACHE[committish1]:
-        REVISIONS_CACHE[committish1][committish2] = dict()
-    if filename not in REVISIONS_CACHE[committish1][committish2]:
+    if committish1 not in COMMITS_CACHE:
+        COMMITS_CACHE[committish1] = dict()
+    if committish2 not in COMMITS_CACHE[committish1]:
+        COMMITS_CACHE[committish1][committish2] = dict()
+    if filename not in COMMITS_CACHE[committish1][committish2]:
         command = ["rev-list", f"^{committish1}", committish2]
         if filename is not None:
             command.extend(["--", filename])
         output = run_git_command(command)
-        REVISIONS_CACHE[committish1][committish2][filename] = list(
+        COMMITS_CACHE[committish1][committish2][filename] = list(
             line for line in output.split("\n") if line
         )
-    return REVISIONS_CACHE[committish1][committish2][filename]
+    return COMMITS_CACHE[committish1][committish2][filename]
 
 
 def cleanup_filename(filename):
@@ -898,43 +891,43 @@ def process_hunk_from_diff_output(
     return DiffHunk([original_file_hunk_pos, final_file_hunk_pos], hunk_content)
 
 
-def get_revision_from_modified_line(line: str) -> str:
+def get_commit_from_modified_line(line: str) -> str:
     """
-    Return the revision id from an added or removed line
+    Return the commit id from an added or removed line
     """
     starting_index = 0
     return line[starting_index : line.index(" ")]
 
 
-def print_revision_line(current_revision, previous_revision, adding_line):
+def print_commit_line(current_commit, previous_commit, adding_line):
     """
     Print hint line if hints are enabled
 
     if hints are disabled, nothing will be done
 
-    Will check HINTS dictionary for revision.
+    Will check HINTS dictionary for commit.
     If it's not there, will ask git for it and add it to the hints dictionary.
 
-    have to return full revision ID
+    have to return full commit ID
 
     """
-    # have to process revision to see it we need to print hint before the revision
+    # have to process commit to see it we need to print hint before the commit
     if HINTS is None:
         # not using hints, nothing to do
         return
 
-    if previous_revision is not None and current_revision == previous_revision:
-        # same revision, nothing to do
-        return current_revision
+    if previous_commit is not None and current_commit == previous_commit:
+        # same commit, nothing to do
+        return current_commit
 
     # have to print hint
     hint = None
-    if not current_revision in HINTS:
+    if not current_commit in HINTS:
         # have to get hint from git and add it to hints
-        hint = git_revision_hint(current_revision)
-        HINTS[current_revision] = hint
+        hint = git_commit_hint(current_commit)
+        HINTS[current_commit] = hint
     else:
-        hint = HINTS[current_revision]
+        hint = HINTS[current_commit]
     appendOutput("\t")
     if OPTIONS["COLOR"]:
         appendOutput(COLOR_WHITE)
@@ -943,33 +936,33 @@ def print_revision_line(current_revision, previous_revision, adding_line):
         appendOutput(COLOR_RESET)
     appendOutput("\n")
 
-    return current_revision
+    return current_commit
 
 
-def get_parent_revisions(revision: str) -> list[str]:
+def get_parent_commits(commit: str) -> list[str]:
     """
-    Find the parent revisions of a given revision
+    Find the parent commits of a given commit
     """
-    if revision in PARENT_REVISIONS_CACHE:
-        return PARENT_REVISIONS_CACHE[revision]
-    # didn't have the parent revisions
+    if commit in PARENT_COMMITS_CACHE:
+        return PARENT_COMMITS_CACHE[commit]
+    # didn't have the parent commits
     parents = list(
         parent.strip("\n")
-        for parent in run_git_command(["rev-parse", f"{revision}^@"]).split("\n")
+        for parent in run_git_command(["rev-parse", f"{commit}^@"]).split("\n")
         if parent
     )
-    PARENT_REVISIONS_CACHE[revision] = parents
+    PARENT_COMMITS_CACHE[commit] = parents
     return parents
 
 
 def process_added_line(added_line: str) -> str:
     """
-    Given a line that was aded, let's find out the revision ID
+    Given a line that was aded, let's find out the commit ID
     """
     # get rid of prefix
-    revision = get_revision_from_modified_line(added_line)
-    # let's find the real revision ID
-    return get_full_revision_id(revision)
+    commit = get_commit_from_modified_line(added_line)
+    # let's find the real commit ID
+    return get_full_commit_id(commit)
 
 
 def get_line_number_from_deleted_line(deleted_line: str) -> int:
@@ -984,30 +977,30 @@ def get_line_number_from_deleted_line(deleted_line: str) -> int:
     return int(deleted_line[i + 1 : parenthesis_index])
 
 
-def get_line_in_revision(
-    original_revision: str, final_revision: str, filename: str, line_number: int
+def get_line_in_commit(
+    original_commit: str, final_commit: str, filename: str, line_number: int
 ) -> Union[int, None]:
     """
-    Get the line number for final_revision of the line that was line_number on original_revision
-    filename has to be the name of the file on the _final_revision_
+    Get the line number for final_commit of the line that was line_number on original_commit
+    filename has to be the name of the file on the _final_commit_
 
     If the line is not present anymore (was deleted), will return None
     """
     # let's create a hunk from the diff
-    if original_revision not in DIFF_FILES_CACHE:
-        DIFF_FILES_CACHE[original_revision] = dict()
-    if final_revision not in DIFF_FILES_CACHE[original_revision]:
-        DIFF_FILES_CACHE[original_revision][final_revision] = dict()
-    if filename not in DIFF_FILES_CACHE[original_revision][final_revision]:
+    if original_commit not in DIFF_FILES_CACHE:
+        DIFF_FILES_CACHE[original_commit] = dict()
+    if final_commit not in DIFF_FILES_CACHE[original_commit]:
+        DIFF_FILES_CACHE[original_commit][final_commit] = dict()
+    if filename not in DIFF_FILES_CACHE[original_commit][final_commit]:
         output = run_git_diff(
-            ["--no-color", f"{original_revision}..{final_revision}", "--", filename]
+            ["--no-color", f"{original_commit}..{final_commit}", "--", filename]
         ).split("\n")
         (diff_object, i) = process_file_from_diff_output(
-            output, 0, original_revision, final_revision
+            output, 0, original_commit, final_commit
         )
-        DIFF_FILES_CACHE[original_revision][final_revision][filename] = diff_object
+        DIFF_FILES_CACHE[original_commit][final_commit][filename] = diff_object
 
-    diff_object = DIFF_FILES_CACHE[original_revision][final_revision][filename]
+    diff_object = DIFF_FILES_CACHE[original_commit][final_commit][filename]
     if diff_object is None:
         # no change
         return line_number
@@ -1049,55 +1042,53 @@ def get_line_in_revision(
 
 
 def process_deleted_line(
-    starting_revision: str,
-    target_revision: str,
+    starting_commit: str,
+    target_commit: str,
     original_filename: str,
     deleted_line_number: int,
 ) -> Union[str, None]:
     """
-    Manually find the revision in the history of committish2 where the line reported was deleted (in relation to committish1)
+    Manually find the commit in the history of committish2 where the line reported was deleted (in relation to committish1)
     This will be called when committish1 is _not_ part of the history of committish2
 
-    If a revision could not be found, will return None (for recursion purposes)
+    If a commit could not be found, will return None (for recursion purposes)
 
-    revisions_committish2 are the revisions that are exclusive for committish2 (not present in the history of committish1)
+    commits_committish2 are the commits that are exclusive for committish2 (not present in the history of committish1)
     """
-    # find _all_ revisions that are part of "target" revision that are not part of the history of "starting" revision
-    revisions_target = get_revisions(starting_revision, target_revision)
+    # find _all_ commits that are part of "target" commit that are not part of the history of "starting" commit
+    commits_target = get_commits(starting_commit, target_commit)
     # TODO find the name of the file on committish2
-    revisions_for_file = get_revisions(
-        starting_revision, target_revision, original_filename
-    )
-    if len(revisions_for_file) == 0:
+    commits_for_file = get_commits(starting_commit, target_commit, original_filename)
+    if len(commits_for_file) == 0:
         return None
-    revision = revisions_for_file[0]
+    commit = commits_for_file[0]
     """
-    on revision, the line must be _gone_.
-    If it is _not_ gone, then the deleting revision was on a previous (recursive call)
+    on commit, the line must be _gone_.
+    If it is _not_ gone, then the deleting commit was on a previous (recursive call)
     """
-    line_in_revision = get_line_in_revision(
-        starting_revision, revision, original_filename, deleted_line_number
+    line_in_commit = get_line_in_commit(
+        starting_commit, commit, original_filename, deleted_line_number
     )
-    if line_in_revision is not None:
-        # Line is not deleted on this revision.... returning None
+    if line_in_commit is not None:
+        # Line is not deleted on this commit.... returning None
         return None
-    # if in all parents (that are _not_ part of committish1) the line is gone, then we found the revision where it was deleted
-    for parent in get_parent_revisions(revision):
-        if parent not in revisions_target:
+    # if in all parents (that are _not_ part of committish1) the line is gone, then we found the commit where it was deleted
+    for parent in get_parent_commits(commit):
+        if parent not in commits_target:
             # Parent is in the history of committish1, discarding for analysis
             continue
-        line_in_revision = get_line_in_revision(
-            starting_revision, parent, original_filename, deleted_line_number
+        line_in_commit = get_line_in_commit(
+            starting_commit, parent, original_filename, deleted_line_number
         )
-        if line_in_revision is None:
+        if line_in_commit is None:
             # Line is _not_ included in this parent... going into this parent
             result = process_deleted_line(
-                starting_revision, parent, original_filename, deleted_line_number
+                starting_commit, parent, original_filename, deleted_line_number
             )
             if result is not None:
                 return result
-    # if we reached this point, we ran out of parents... this is the culprit revision
-    return revision
+    # if we reached this point, we ran out of parents... this is the culprit commit
+    return commit
 
 
 def process_file_from_diff_output(
@@ -1196,7 +1187,7 @@ def process_diff_output(output: str, committish1: str, committish2: str) -> None
     """
     process diff output
     """
-    # when using hints, will have a dictionary with the hint of each revision (so that they are only looked for once)
+    # when using hints, will have a dictionary with the hint of each commit (so that they are only looked for once)
     global HINTS, BLAMED_FILES_CACHE, DIFF_FILES_CACHE
     if OPTIONS["HINTS"]:
         HINTS = dict()
@@ -1372,7 +1363,7 @@ for param in sys.argv[1:]:
     if double_dot_index == -1:
         # single committish
         committish1 = committish2
-        committish2 = get_full_revision_id(param)
+        committish2 = get_full_commit_id(param)
     else:
         # passing both committishes in a single shot
         if committish2 is not None:
@@ -1380,8 +1371,8 @@ for param in sys.argv[1:]:
             raise Exception(
                 f"Already had at least a committish to work on defined: {committish2}"
             )
-        committish1 = get_full_revision_id(param[0:double_dot_index])
-        committish2 = get_full_revision_id(param[double_dot_index + 2 :])
+        committish1 = get_full_commit_id(param[0:double_dot_index])
+        committish2 = get_full_commit_id(param[double_dot_index + 2 :])
 
 
 if not color_set:
@@ -1399,7 +1390,7 @@ if committish2 is None:
 
 if committish1 is None:
     committish1 = committish2
-    committish2 = get_full_revision_id("HEAD")
+    committish2 = get_full_commit_id("HEAD")
 
 merge_base = run_git_merge_base(committish1, committish2)
 if merge_base != committish1 and merge_base != committish2:

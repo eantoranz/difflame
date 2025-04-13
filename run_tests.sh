@@ -8,10 +8,10 @@ function check_difflame {
   # parameters
   # - starting commit
   # - final commit
-  # - revision to check
+  # - commit to check
   # - expected added lines
   # - expected removed lines
-  echo -n "Running test for changes from revision $3 in difflame $1..$2: "
+  echo -n "Running test for changes from commit $3 in difflame $1..$2: "
   added_lines=$( ../difflame --no-progress $1 $2 | grep "^+$3" | wc -l )
   test $added_lines -eq $4 || (
     echo FAILED
